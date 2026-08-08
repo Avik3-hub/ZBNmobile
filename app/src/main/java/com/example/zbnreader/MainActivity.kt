@@ -36,6 +36,9 @@ class MainActivity : AppCompatActivity() {
     private var selectedRecord: FlightRecord? = null
     private var selectedRow: TableRow? = null
 
+    // Экземпляр парсера оглавления
+    private val tocParser = ZbnTocParser()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -156,7 +159,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(5, 8, 5, 8)
         }
 
-        val columns = arrayOf(" № ", " Размер ", " Дата ", " Время ", " Начало ", " Конец ", " Рейс ", " Борт ")
+        val columns = arrayOf(" № ", " Адрес/Размер ", " Дата ", " Время ", " Начало ", " Конец ", " Рейс ", " Борт ")
         for (col in columns) {
             val tv = TextView(this).apply {
                 text = col
@@ -213,7 +216,7 @@ class MainActivity : AppCompatActivity() {
         selectedRecord = record
         btnCopySelected.isEnabled = true
         tvStatus.text = "Выбрано включение №${record.number}"
-        log("Выбрана строка: Включение №${record.number}, Рейс: ${record.flightNum}, Размер: ${record.sizeBytes} Б")
+        log("Выбрана строка: Включение №${record.number}, Рейс: ${record.flightNum}, Смещение: ${record.sizeBytes} Б")
     }
 
     private fun startReading() {
@@ -275,7 +278,7 @@ class MainActivity : AppCompatActivity() {
 
                 log("Получен ответ ACK (0x06)!")
 
-                log("Запрос каталога включений (лимит: $sessionLimit)...")
+                log("Запрос оглавления включений (лимит: $sessionLimit)...")
                 val records = readCatalog(port, sessionLimit)
 
                 runOnUiThread {
@@ -285,10 +288,10 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (records.isEmpty()) {
-                    log("Включения не найдены или требуется полный дамп...")
+                    log("Включения не найдены или CRC кадра не совпал.")
                     updateStatus("Статус: Оглавление пусто")
                 } else {
-                    log("Успешно отображено включений: ${records.size}")
+                    log("Успешно распаршено включений: ${records.size}")
                     updateStatus("Статус: Загружено ${records.size} включений")
                 }
 
@@ -305,38 +308,27 @@ class MainActivity : AppCompatActivity() {
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
         val flights = mutableListOf<FlightRecord>()
 
-        log("Отправка команды запроса оглавления ('I')...")
-        port.write(byteArrayOf('I'.code.toByte()), 1000)
+        // Отправка команды 'M' (0x4D) согласно логу обмена
+        log("Отправка команды 'M' (0x4D) для чтения каталога...")
+        port.write(byteArrayOf(0x4D.toByte()), 1000)
 
         val buffer = ByteArray(512)
-        val count = port.read(buffer, 1500)
+        var noDataCounter = 0
 
-        log("Принято байт оглавления: $count")
-
-        if (count > 0) {
-            // =========================================================================
-            // ЯКОРЬ_ОГЛАВЛЕНИЕ_ЗБН: Разбор байтового буфера заголовка
-            // Позже заменится на реальный парсинг структуры ЗБН
-            // =========================================================================
-            val totalFound = count / 16
-            for (i in 0 until totalFound) {
-                flights.add(
-                    FlightRecord(
-                        number = 1000 + i + 1,
-                        sizeBytes = 50688L * (i + 1),
-                        date = "07.08.26",
-                        duration = "00:08:48",
-                        startTime = "10:09:46",
-                        endTime = "-",
-                        flightNum = "9336",
-                        tailNum = "22469"
-                    )
-                )
+        // Считываем incoming-буферы и передаем их в ZbnTocParser
+        while (flights.size < limit && noDataCounter < 3) {
+            val count = port.read(buffer, 1000)
+            if (count > 0) {
+                noDataCounter = 0
+                val parsedRecords = tocParser.parseBuffer(buffer, count)
+                flights.addAll(parsedRecords)
+                log("Принято байт: $count | Распарсено кадров: ${parsedRecords.size}")
+            } else {
+                noDataCounter++
             }
-            return flights.takeLast(limit)
         }
 
-        return emptyList()
+        return flights.take(limit)
     }
 
     private fun copySelectedFlight() {
