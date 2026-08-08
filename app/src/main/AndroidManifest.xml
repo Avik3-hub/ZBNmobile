@@ -5,9 +5,10 @@
 
     <application
         android:allowBackup="true"
-        android:label="ЗБН Читатель"
+        android:label="СПИ ЗБН"
         android:supportsRtl="true"
         android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
+        android:icon="@mipmap/My_logo"
         <activity
             android:name=".MainActivity"
             android:exported="true">
