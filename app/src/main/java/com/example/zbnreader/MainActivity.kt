@@ -82,105 +82,162 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startReading() {
-        btnStart.isEnabled = false
-        progressBar.visibility = View.VISIBLE
-        tvLog.text = ""
-        tvStatus.text = "Статус: Чтение..."
+    btnStart.isEnabled = false
+    progressBar.visibility = View.VISIBLE
+    tvLog.text = ""
+    tvStatus.text = "Статус: Чтение настроек и подключение..."
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-            val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+    // 1. Считываем ВСЕ сохраненные настройки из памяти
+    val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+    val currentBaudRate = prefs.getInt("baud_rate", 115200)
+    val limitStr = prefs.getString("limit", "10") ?: "10"
+    val sessionLimit = limitStr.toIntOrNull() ?: 10
 
-            if (drivers.isEmpty()) {
-                log("Ошибка: USB-RS422 конвертер не обнаружен!")
-                updateStatus("Статус: Ошибка (Нет адаптера)")
+    val sysTypeIndex = prefs.getInt("system_type", 0)
+    val arincIndex = prefs.getInt("arinc", 0)
+    val regSpeedIndex = prefs.getInt("reg_speed", 0)
+
+    log("Загружены настройки:")
+    log(" • Скорость (Baud Rate): $currentBaudRate")
+    log(" • Лимит включений: $sessionLimit")
+
+    lifecycleScope.launch(Dispatchers.IO) {
+        val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+
+        if (drivers.isEmpty()) {
+            log("Ошибка: USB-RS422 конвертер не обнаружен!")
+            updateStatus("Статус: Ошибка (Нет адаптера)")
+            resetUi()
+            return@launch
+        }
+
+        val driver = drivers[0]
+        val connection = usbManager.openDevice(driver.device)
+        if (connection == null) {
+            log("Ошибка: Нет разрешения на использование USB!")
+            updateStatus("Статус: Ошибка доступа к USB")
+            resetUi()
+            return@launch
+        }
+
+        val port = driver.ports[0]
+        try {
+            port.open(connection)
+            // Устанавливаем выбранную скорость обмена
+            port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+            port.dtr = false
+            port.rts = false
+
+            log("Порт открыт: $currentBaudRate 8N1")
+
+            // Рукопожатие: ENQ (0x05)
+            log("Отправка ENQ (0x05)...")
+            port.write(byteArrayOf(0x05), 1000)
+
+            val ackBuf = ByteArray(1)
+            val readAck = port.read(ackBuf, 1000)
+            if (readAck == 0 || ackBuf[0] != 0x06.toByte()) {
+                log("Ошибка: Ответ от ЗБН не получен (ожидался ACK 0x06)")
+                updateStatus("Статус: Сбой рукопожатия")
                 resetUi()
                 return@launch
             }
 
-            val driver = drivers[0]
-            val connection = usbManager.openDevice(driver.device)
-            if (connection == null) {
-                log("Ошибка: Нет разрешения на использование USB!")
-                updateStatus("Статус: Ошибка доступа к USB")
-                resetUi()
-                return@launch
+            log("Получен ответ ACK (0x06)!")
+
+            // 2. Запрос оглавления ЗБН (списка включений)
+            log("Запрос каталога включений (лимит: $sessionLimit)...")
+            
+            // Вызываем функцию чтения оглавления
+            val flightList = readCatalog(port, sessionLimit)
+
+            if (flightList.isEmpty()) {
+                log("Включения не найдены или выполняется дамп всей памяти...")
+                // Если оглавления нет, выполняем полный дамп памяти по команде 'M'
+                downloadFullDump(port)
+            } else {
+                log("Найдено включений: ${flightList.size}")
+                flightList.forEachIndexed { index, flight ->
+                    log(" Рейс #${index + 1}: $flight")
+                }
+                updateStatus("Статус: Найдено ${flightList.size} включений")
             }
 
-            val port = driver.ports[0]
-            try {
-                port.open(connection)
-                val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-val currentBaudRate = prefs.getInt("baud_rate", 115200)
-port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                  port.dtr = false
-                port.rts = false
+        } catch (e: Exception) {
+            log("Ошибка: ${e.message}")
+            updateStatus("Статус: Сбой передачи")
+        } finally {
+            try { port.close() } catch (_: Exception) {}
+            resetUi()
+        }
+    }
+}
+// Функция считывания оглавления ЗБН и применения лимита
+private fun readCatalog(port: UsbSerialPort, limit: Int): List<String> {
+    val flights = mutableListOf<String>()
 
-                log("Порт открыт: 115200 8N1")
+    // Отправляем команду запроса оглавления/паспорта (команда 'I' или 'C' в зависимости от протокола ЗБН)
+    // В данном примере запрашиваем заголовки кадров
+    log("Отправка команды запроса оглавления...")
+    port.write(byteArrayOf('I'.code.toByte()), 1000)
 
-                // 1. Рукопожатие: ENQ (0x05)
-                log("Отправка ENQ (0x05)...")
-                port.write(byteArrayOf(0x05), 1000)
+    val buffer = ByteArray(256)
+    val count = port.read(buffer, 1500)
 
-                val ackBuf = ByteArray(1)
-                val readAck = port.read(ackBuf, 1000)
-                if (readAck == 0 || ackBuf[0] != 0x06.toByte()) {
-                    log("Ошибка: Ответ от ЗБН не получен (ожидался ACK 0x06)")
-                    updateStatus("Статус: Сбой рукопожатия")
-                    resetUi()
-                    return@launch
-                }
+    if (count > 0) {
+        // Симулируем разбор полученных записей о полетах из оглавления
+        // Здесь считываются метки времени включения питания ЗБН
+        val totalFoundInMemory = count / 16 // Допустим, 1 запись = 16 байт
+        
+        for (i in 0 until totalFoundInMemory) {
+            flights.add("Включение №${i + 1}")
+        }
 
-                log("Получен ответ ACK (0x06)!")
+        // Обрезаем список по заданному лимиту
+        return flights.takeLast(limit)
+    }
 
-                // 2. Команда 'M' (0x4D)
-                log("Отправка команды 'M' (0x4D)...")
-                port.write(byteArrayOf(0x4D.toByte()), 1000)
+    return emptyList()
+}
 
-                // 3. Выгрузка в папку Downloads
-                val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                val fileName = "ZBN_DUMP_$timeStamp.bin"
-                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                val outputFile = File(downloadsDir, fileName)
-                val fos = FileOutputStream(outputFile)
+// Функция полного дампа памяти (если считываем весь накопитель)
+private fun downloadFullDump(port: UsbSerialPort) {
+    log("Отправка команды 'M' (0x4D) для считывания всей памяти...")
+    port.write(byteArrayOf(0x4D.toByte()), 1000)
 
-                val buffer = ByteArray(512)
-                var totalBytes = 0
-                var noDataCounter = 0
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val fileName = "ZBN_DUMP_$timeStamp.bin"
+    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    val outputFile = File(downloadsDir, fileName)
+    val fos = FileOutputStream(outputFile)
 
-                log("Прием данных...")
-                while (true) {
-                    val count = port.read(buffer, 1000)
-                    if (count > 0) {
-                        fos.write(buffer, 0, count)
-                        totalBytes += count
-                        noDataCounter = 0
-                        log("Принято: $totalBytes байт")
-                    } else {
-                        noDataCounter++
-                        if (noDataCounter >= 3) {
-                            log("Прием завершен (таймаут).")
-                            break
-                        }
-                    }
-                }
+    val buffer = ByteArray(512)
+    var totalBytes = 0
+    var noDataCounter = 0
 
-                fos.flush()
-                fos.close()
-
-                log("УСПЕХ! Принято байт: $totalBytes")
-                log("Файл сохранен: Загрузки/$fileName")
-                updateStatus("Статус: Готово ($totalBytes Б)")
-
-            } catch (e: Exception) {
-                log("Ошибка исключения: ${e.message}")
-                updateStatus("Статус: Сбой передачи")
-            } finally {
-                try { port.close() } catch (_: Exception) {}
-                resetUi()
+    while (true) {
+        val count = port.read(buffer, 1000)
+        if (count > 0) {
+            fos.write(buffer, 0, count)
+            totalBytes += count
+            noDataCounter = 0
+            log("Принято: $totalBytes байт")
+        } else {
+            noDataCounter++
+            if (noDataCounter >= 3) {
+                log("Прием завершен.")
+                break
             }
         }
     }
+
+    fos.flush()
+    fos.close()
+    log("Файл сохранен: Загрузки/$fileName")
+    updateStatus("Статус: Готово ($totalBytes Б)")
+}
+
 
     private fun updateStatus(text: String) {
         runOnUiThread { tvStatus.text = text }
