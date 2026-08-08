@@ -227,12 +227,17 @@ class MainActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
         val currentBaudRate = prefs.getInt("baud_rate", 115200)
-        val limitStr = prefs.getString("limit", "10") ?: "10"
-        val sessionLimit = limitStr.toIntOrNull() ?: 10
+        
+        // Чтение лимита включений с двойной проверкой типа (String / Int)
+        val sessionLimit = try {
+            prefs.getInt("limit", 10)
+        } catch (_: Exception) {
+            prefs.getString("limit", "10")?.toIntOrNull() ?: 10
+        }
 
         log("Загружены настройки:")
         log(" • Скорость (Baud Rate): $currentBaudRate")
-        log(" • Лимит включений: $sessionLimit")
+        log(" • Лимит включений в списке: $sessionLimit")
 
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
@@ -278,7 +283,7 @@ class MainActivity : AppCompatActivity() {
 
                 log("Получен ответ ACK (0x06)!")
 
-                log("Запрос оглавления включений (лимит: $sessionLimit)...")
+                log("Запрос оглавления включений (максимум: $sessionLimit)...")
                 val records = readCatalog(port, sessionLimit)
 
                 runOnUiThread {
@@ -291,7 +296,7 @@ class MainActivity : AppCompatActivity() {
                     log("Включения не найдены или CRC кадра не совпал.")
                     updateStatus("Статус: Оглавление пусто")
                 } else {
-                    log("Успешно распаршено включений: ${records.size}")
+                    log("Успешно отображено включений: ${records.size} из $sessionLimit заданных")
                     updateStatus("Статус: Загружено ${records.size} включений")
                 }
 
@@ -308,21 +313,26 @@ class MainActivity : AppCompatActivity() {
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
         val flights = mutableListOf<FlightRecord>()
 
-        // Отправка команды 'M' (0x4D) согласно логу обмена
-        log("Отправка команды 'M' (0x4D) для чтения каталога...")
+        log("Отправка команды 'M' (0x4D)...")
         port.write(byteArrayOf(0x4D.toByte()), 1000)
 
         val buffer = ByteArray(512)
         var noDataCounter = 0
 
-        // Считываем incoming-буферы и передаем их в ZbnTocParser
+        // Читаем из порта, пока не наберем нужное число элементов или не истечет время
         while (flights.size < limit && noDataCounter < 3) {
             val count = port.read(buffer, 1000)
             if (count > 0) {
                 noDataCounter = 0
                 val parsedRecords = tocParser.parseBuffer(buffer, count)
                 flights.addAll(parsedRecords)
-                log("Принято байт: $count | Распарсено кадров: ${parsedRecords.size}")
+                log("Принято байт: $count | Считано включений: ${flights.size} / $limit")
+
+                // Прерываем считывание, как только достигли заданного лимита
+                if (flights.size >= limit) {
+                    log("Достигнут заданный лимит ($limit включений). Считывание остановлено.")
+                    break
+                }
             } else {
                 noDataCounter++
             }
