@@ -1,6 +1,7 @@
 package com.example.zbnreader
 
 import android.os.Bundle
+import android.view.MenuItem
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Spinner
@@ -13,7 +14,11 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        // 1. Находим элементы UI по их ID из activity_settings.xml
+        // Включаем стрелку "Назад" в верхней панели (ActionBar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.title = "Настройки приложения"
+
+        // 1. Находим элементы UI по их ID
         val spinnerSystemType = findViewById<Spinner>(R.id.spinnerSystemType)
         val spinnerArinc = findViewById<Spinner>(R.id.spinnerArinc)
         val spinnerRegSpeed = findViewById<Spinner>(R.id.spinnerRegSpeed)
@@ -24,7 +29,7 @@ class SettingsActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
 
-        // 2. Читаем ранее сохраненные значения и устанавливаем их
+        // 2. Читаем ранее сохраненные значения
         spinnerSystemType.setSelection(prefs.getInt("system_type", 0))
         spinnerArinc.setSelection(prefs.getInt("arinc", 0))
         spinnerRegSpeed.setSelection(prefs.getInt("reg_speed", 0))
@@ -55,12 +60,24 @@ class SettingsActivity : AppCompatActivity() {
             val baudRateInt = selectedSpeedStr.toIntOrNull() ?: 115200
             editor.putInt("baud_rate", baudRateInt)
 
-            editor.putString("limit", etListLimit.text.toString())
+            // Проверка поля ввода лимита на пустоту
+            val limitText = etListLimit.text.toString().trim()
+            val safeLimit = if (limitText.isEmpty() || limitText.toIntOrNull() == 0) "10" else limitText
+            editor.putString("limit", safeLimit)
 
             editor.apply()
 
             Toast.makeText(this, "Настройки сохранены!", Toast.LENGTH_SHORT).show()
-            finish() // Закрываем экран настроек и возвращаемся в главный экран
+            finish()
         }
+    }
+
+    // Обработка нажатия на стрелку "Назад" в верхней панели
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == android.R.id.home) {
+            finish()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
     }
 }
