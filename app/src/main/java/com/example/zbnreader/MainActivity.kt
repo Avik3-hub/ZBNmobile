@@ -377,8 +377,16 @@ class MainActivity : AppCompatActivity() {
                 // 2. Старт потока
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
 
-                val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                val fileName = "ZBN_FLIGHT_${record.number}_$timeStamp.bin"
+                // 3. Формирование имени по шаблону: ггггммдд_номерВключения_НАГИБИН (без расширения)
+                val dateFormatted = try {
+                    val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
+                    val parsedDate = inputFormat.parse(record.date.trim())
+                    SimpleDateFormat("yyyyMMdd", Locale.US).format(parsedDate ?: Date())
+                } catch (e: Exception) {
+                    SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                }
+
+                val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
                 val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
                 val outputFile = File(downloadsDir, fileName)
                 val fos = FileOutputStream(outputFile)
@@ -448,7 +456,7 @@ class MainActivity : AppCompatActivity() {
                 val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
                 val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
-                saveFlightMetadata(fileName.removeSuffix(".bin"), sysType, arinc, regSpeed)
+                saveFlightMetadata(fileName, sysType, arinc, regSpeed)
 
                 log("УСПЕХ! Включение №${record.number} сохранено ($writtenBytes Б)")
                 updateStatus("Статус: Сохранен рейс №${record.flightNum}")
@@ -496,7 +504,7 @@ class MainActivity : AppCompatActivity() {
         port.write(byteArrayOf(0x4D.toByte()), 1000)
 
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val fileName = "ZBN_DUMP_$timeStamp.bin"
+        val fileName = "ZBN_DUMP_$timeStamp"
         val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
         val outputFile = File(downloadsDir, fileName)
         val fos = FileOutputStream(outputFile)
@@ -535,7 +543,7 @@ class MainActivity : AppCompatActivity() {
 
         log("Применение схемы кадра: $sysType | ARINC-$arinc | $regSpeed поз./с")
 
-        saveFlightMetadata(fileName.removeSuffix(".bin"), sysType, arinc, regSpeed)
+        saveFlightMetadata(fileName, sysType, arinc, regSpeed)
 
         log("УСПЕХ! Файл сохранен: $fileName")
         updateStatus("Статус: Готово ($totalBytes Б)")
@@ -554,7 +562,7 @@ class MainActivity : AppCompatActivity() {
             ========================================
             МЕТАДАННЫЕ ПОЛЁТНОЙ ИНФОРМАЦИИ
             ========================================
-            Имя файла дампа: $binFileName.bin
+            Имя файла дампа: $binFileName
             Дата скачивания: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}
             
             ПАРАМЕТРЫ СИСТЕМЫ:
