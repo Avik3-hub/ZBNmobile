@@ -1,1 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="system_types">
+        <item>МСРП-А-02</item>
+        <item>МСРП-64</item>
+        <item>ТЕСТ</item>
+    </string-array>
+
+    <string-array name="arinc_types">
+        <item>717</item>
+        <item>429</item>
+    </string-array>
+
+    <string-array name="reg_speeds">
+        <item>128</item>
+        <item>256</item>
+        <item>512</item>
+    </string-array>
+
+    <string-array name="interfaces">
+        <item>RS-422</item>
+        <item>RS-232</item>
+    </string-array>
+
+    <string-array name="baud_rates">
+        <item>921600</item>
+        <item>460800</item>
+        <item>230400</item>
+        <item>115200</item>
+        <item>57600</item>
+        <item>9600</item>
+    </string-array>
+</resources>
 
