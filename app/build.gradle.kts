@@ -13,7 +13,9 @@ android {
         targetSdk = 34
         versionCode = 2
         versionName = "1.1"
-applicationVariants.all {
+    } // <-- Закрывающая скобка для defaultConfig
+
+    applicationVariants.all {
         val variant = this
         variant.outputs.all {
             val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
@@ -41,4 +43,3 @@ dependencies {
     // lifecycleScope для безопасного запуска задач из Activity
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 }
-
