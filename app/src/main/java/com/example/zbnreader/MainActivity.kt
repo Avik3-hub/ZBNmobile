@@ -334,6 +334,8 @@ class MainActivity : AppCompatActivity() {
         val record = selectedRecord ?: return
         btnCopySelected.isEnabled = false
         progressBar.visibility = View.VISIBLE
+        tvStatus.text = "Статус: Скачивание включения №${record.number}..."
+
         val currentIndex = flightList.indexOf(record)
         val startOffset = record.sizeBytes
         
@@ -344,23 +346,124 @@ class MainActivity : AppCompatActivity() {
         }
 
         log("Запуск фонового скачивания включения №${record.number}...")
-        
-        // Запуск Foreground Service
-        val intent = Intent(this, FlightDownloadService::class.java).apply {
-            action = FlightDownloadService.ACTION_START_COPY
-            putExtra(FlightDownloadService.EXTRA_RECORD_NUMBER, record.number)
-            putExtra(FlightDownloadService.EXTRA_RECORD_DATE, record.date)
-            putExtra(FlightDownloadService.EXTRA_RECORD_FLIGHT, record.flightNum)
-            putExtra(FlightDownloadService.EXTRA_START_OFFSET, startOffset)
-            bytesToRead?.let { putExtra(FlightDownloadService.EXTRA_BYTES_TO_READ, it) }
-        }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+            val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+            if (drivers.isEmpty()) {
+                log("Ошибка: USB-RS422 конвертер не обнаружен!")
+                updateStatus("Статус: Ошибка (Нет адаптера)")
+                resetUi()
+                return@launch
+            }
+
+            val driver = drivers[0]
+            val connection = usbManager.openDevice(driver.device)
+            if (connection == null) {
+                log("Ошибка: Нет разрешения на использование USB!")
+                updateStatus("Статус: Ошибка доступа к USB")
+                resetUi()
+                return@launch
+            }
+
+            val port = driver.ports[0]
+            try {
+                val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+                val baud = prefs.getInt("baud_rate", 115200)
+                port.open(connection)
+                port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+
+                // 1. Рукопожатие
+                port.write(byteArrayOf(0x05), 1000)
+                val ack = ByteArray(1)
+                port.read(ack, 1000)
+
+                // 2. Старт потока
+                port.write(byteArrayOf(0x4D.toByte()), 1000)
+
+                // 3. Формирование имени по шаблону: ггггммдд_номерВключения_НАГИБИН (без расширения)
+                val dateFormatted = try {
+                    val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
+                    val parsedDate = inputFormat.parse(record.date.trim())
+                    SimpleDateFormat("yyyyMMdd", Locale.US).format(parsedDate ?: Date())
+                } catch (e: Exception) {
+                    SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                }
+
+                val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
+                val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+                val outputFile = File(downloadsDir, fileName)
+                val fos = FileOutputStream(outputFile)
+
+                val buffer = ByteArray(512)
+                var skippedBytes = 0L
+                var writtenBytes = 0L
+                var noDataCounter = 0
+
+                while (true) {
+                    val count = port.read(buffer, 1000)
+                    if (count > 0) {
+                        noDataCounter = 0
+                        
+                        // Пропускаем байты до начального адреса полета
+                        if (skippedBytes < startOffset) {
+                            val neededToSkip = startOffset - skippedBytes
+                            if (count <= neededToSkip) {
+                                skippedBytes += count
+                                continue
+                            } else {
+                                val validDataStart = neededToSkip.toInt()
+                                val validLength = count - validDataStart
+                                skippedBytes = startOffset
+                                
+                                val bytesToWrite = if (bytesToRead != null && (writtenBytes + validLength) > bytesToRead) {
+                                    (bytesToRead - writtenBytes).toInt()
+                                } else {
+                                    validLength
+                                }
+                                fos.write(buffer, validDataStart, bytesToWrite)
+                                writtenBytes += bytesToWrite
+                            }
+                        } else {
+                            // Записываем полезные данные полета
+                            val bytesToWrite = if (bytesToRead != null && (writtenBytes + count) > bytesToRead) {
+                                (bytesToRead - writtenBytes).toInt()
+                            } else {
+                                count
+                            }
+                            fos.write(buffer, 0, bytesToWrite)
+                            writtenBytes += bytesToWrite
+                        }
+                        log("Сохранено: $writtenBytes Б")
+                        if (bytesToRead != null && writtenBytes >= bytesToRead) {
+                            log("Достигнут конец включения №${record.number}")
+                            break
+                        }
+                    } else {
+                        noDataCounter++
+                        if (noDataCounter >= 3) break
+                    }
+                }
+                fos.flush()
+                fos.close()
+
+                val sysTypes = resources.getStringArray(R.array.system_types)
+                val arincTypes = resources.getStringArray(R.array.arinc_types)
+                val regSpeeds = resources.getStringArray(R.array.reg_speeds)
+                val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
+                val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
+                val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
+
+                saveFlightMetadata(fileName, sysType, arinc, regSpeed)
+                log("УСПЕХ! Включение №${record.number} сохранено ($writtenBytes Б)")
+                updateStatus("Статус: Сохранен рейс №${record.flightNum}")
+            } catch (e: Exception) {
+                log("Ошибка при выгрузке полета: ${e.message}")
+            } finally {
+                try { port.close() } catch (_: Exception) {}
+                resetUi()
+            }
         }
-        resetUi()
     }
 
     private fun executeFullDumpCommand() {
