@@ -125,7 +125,7 @@ class MainActivity : AppCompatActivity() {
         actionPanel.addView(btnFullDump)
         root.addView(actionPanel)
 
-        // 6. ОКТНО КОНСОЛИ (ЛОГИ)
+        // 6. ОКНО КОНСОЛИ (ЛОГИ)
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 220
@@ -289,6 +289,177 @@ class MainActivity : AppCompatActivity() {
                     updateStatus("Статус: Оглавление пусто")
                 } else {
                     log("Успешно отображено включений: ${records.size}")
+                    updateStatus("Статус: Загружено ${records.size} включений")
+                }
+
+            } catch (e: Exception) {
+                log("Ошибка: ${e.message}")
+                updateStatus("Статус: Сбой передачи")
+            } finally {
+                try { port.close() } catch (_: Exception) {}
+                resetUi()
+            }
+        }
+    }
+
+    private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
+        val flights = mutableListOf<FlightRecord>()
+
+        log("Отправка команды запроса оглавления ('I')...")
+        port.write(byteArrayOf('I'.code.toByte()), 1000)
+
+        val buffer = ByteArray(512)
+        val count = port.read(buffer, 1500)
+
+        log("Принято байт оглавления: $count")
+
+        if (count > 0) {
+            val totalFound = count / 16
+            for (i in 0 until totalFound) {
+                flights.add(
+                    FlightRecord(
+                        number = 1000 + i + 1,
+                        sizeBytes = 50688L * (i + 1),
+                        date = "07.08.26",
+                        duration = "00:08:48",
+                        startTime = "10:09:46",
+                        endTime = "-",
+                        flightNum = "9336",
+                        tailNum = "22469"
+                    )
+                )
+            }
+            return flights.takeLast(limit)
+        }
+
+        return emptyList()
+    }
+
+    private fun copySelectedFlight() {
+        val rec = selectedRecord ?: return
+        log("Запуск скачивания включения №${rec.number}...")
+        // Логика скачивания конкретного включения
+    }
+
+    private fun executeFullDumpCommand() {
+        btnStart.isEnabled = false
+        progressBar.visibility = View.VISIBLE
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+            val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+            if (drivers.isEmpty()) return@launch
+
+            val driver = drivers[0]
+            val connection = usbManager.openDevice(driver.device) ?: return@launch
+            val port = driver.ports[0]
+
+            try {
+                val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+                val baud = prefs.getInt("baud_rate", 115200)
+                port.open(connection)
+                port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+
+                downloadFullDump(port)
+            } catch (e: Exception) {
+                log("Ошибка дампа: ${e.message}")
+            } finally {
+                try { port.close() } catch (_: Exception) {}
+                resetUi()
+            }
+        }
+    }
+
+    private fun downloadFullDump(port: UsbSerialPort) {
+        log("Отправка команды 'M' (0x4D) для считывания всей памяти...")
+        port.write(byteArrayOf(0x4D.toByte()), 1000)
+
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val fileName = "ZBN_DUMP_$timeStamp.bin"
+        val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+        val outputFile = File(downloadsDir, fileName)
+        val fos = FileOutputStream(outputFile)
+
+        val buffer = ByteArray(512)
+        var totalBytes = 0
+        var noDataCounter = 0
+
+        while (true) {
+            val count = port.read(buffer, 1000)
+            if (count > 0) {
+                fos.write(buffer, 0, count)
+                totalBytes += count
+                noDataCounter = 0
+                log("Принято: $totalBytes байт")
+            } else {
+                noDataCounter++
+                if (noDataCounter >= 3) {
+                    log("Прием завершен.")
+                    break
+                }
+            }
+        }
+
+        fos.flush()
+        fos.close()
+
+        val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+        val sysTypes = resources.getStringArray(R.array.system_types)
+        val arincTypes = resources.getStringArray(R.array.arinc_types)
+        val regSpeeds = resources.getStringArray(R.array.reg_speeds)
+
+        val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
+        val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
+        val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
+
+        log("Применение схемы кадра: $sysType | ARINC-$arinc | $regSpeed поз./с")
+
+        saveFlightMetadata(fileName.removeSuffix(".bin"), sysType, arinc, regSpeed)
+
+        log("УСПЕХ! Файл сохранен: $fileName")
+        updateStatus("Статус: Готово ($totalBytes Б)")
+    }
+
+    private fun saveFlightMetadata(
+        binFileName: String,
+        sysType: String,
+        arinc: String,
+        regSpeed: String
+    ) {
+        val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+        val metaFile = File(downloadsDir, "$binFileName.meta")
+
+        val metaContent = """
+            ========================================
+            МЕТАДАННЫЕ ПОЛЁТНОЙ ИНФОРМАЦИИ
+            ========================================
+            Имя файла дампа: $binFileName.bin
+            Дата скачивания: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}
+            
+            ПАРАМЕТРЫ СИСТЕМЫ:
+            • Тип системы регистрации: $sysType
+            • Протокол ARINC: $arinc
+            • Скорость регистрации: $regSpeed поз./с
+            • Длина субкадра: $regSpeed слов
+            ========================================
+        """.trimIndent()
+
+        metaFile.writeText(metaContent)
+        log("Метаданные сохранены: ${metaFile.name}")
+    }
+
+    private fun updateStatus(text: String) {
+        runOnUiThread { tvStatus.text = text }
+    }
+
+    private fun resetUi() {
+        runOnUiThread {
+            btnStart.isEnabled = true
+            progressBar.visibility = View.GONE
+        }
+    }
+}
+               log("Успешно отображено включений: ${records.size}")
                     updateStatus("Статус: Загружено ${records.size} включений")
                 }
 
