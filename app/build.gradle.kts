@@ -19,7 +19,7 @@ android {
         val variant = this
         variant.outputs.all {
             val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            output.outputFileName = "ZBNmobile_${variant.buildType.name}.apk"
+            output.outputFileName = "app-debug.apk"
         }
     }
 
