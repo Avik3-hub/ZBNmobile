@@ -47,10 +47,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // ЧЕРНЫЙ ФОН ВСЕГО ПРИЛОЖЕНИЯ
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 20, 20, 20)
-            setBackgroundColor(Color.parseColor("#F5F5F5"))
+            setBackgroundColor(Color.BLACK)
         }
 
         // 1. ВЕРХНЯЯ ПАНЕЛЬ
@@ -64,6 +65,7 @@ class MainActivity : AppCompatActivity() {
             text = "Статус: Подключите ЗБН и нажмите Считать"
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE) // БЕЛЫЙ ТЕКСТ СТАТУСА
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
@@ -86,12 +88,12 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(btnStart)
 
-        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ
+        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ (ТЕМНЫЙ ФОН)
         val scrollTable = HorizontalScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
             )
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#1E1E1E"))
             setPadding(0, 10, 0, 10)
         }
 
@@ -132,16 +134,17 @@ class MainActivity : AppCompatActivity() {
         actionPanel.addView(btnFullDump)
         root.addView(actionPanel)
 
-        // 6. ОКНО КОНСОЛИ
+        // 6. ОКНО КОНСОЛИ (ТЕМНЫЙ ФОН)
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 220
             )
-            setBackgroundColor(Color.parseColor("#E0E0E0"))
+            setBackgroundColor(Color.parseColor("#1E1E1E"))
         }
 
         tvLog = TextView(this).apply {
             textSize = 11f
+            setTextColor(Color.WHITE) // БЕЛЫЙ ТЕКСТ В КОНСОЛИ
             setPadding(10, 10, 10, 10)
         }
         scrollViewLog.addView(tvLog)
@@ -158,7 +161,7 @@ class MainActivity : AppCompatActivity() {
     private fun renderTableHeader() {
         tableLayout.removeAllViews()
         val headerRow = TableRow(this).apply {
-            setBackgroundColor(Color.parseColor("#CCCCCC"))
+            setBackgroundColor(Color.parseColor("#333333")) // ТЕМНЫЙ ФОН ШАПКИ
             setPadding(5, 8, 5, 8)
         }
         val columns = arrayOf(" № ", " Адрес/Размер ", " Дата ", " Время ", " Начало ", " Конец ", " Рейс ", " Борт ")
@@ -167,6 +170,7 @@ class MainActivity : AppCompatActivity() {
                 text = col
                 textSize = 12f
                 setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.WHITE) // БЕЛЫЙ ТЕКСТ ШАПКИ ТАБЛИЦЫ
                 setPadding(8, 4, 8, 4)
                 gravity = Gravity.CENTER
             }
@@ -200,6 +204,7 @@ class MainActivity : AppCompatActivity() {
                 val tv = TextView(this).apply {
                     text = textVal
                     textSize = 12f
+                    setTextColor(Color.WHITE) // БЕЛЫЙ ТЕКСТ В СТРОКАХ ТАБЛИЦЫ
                     setPadding(8, 4, 8, 4)
                     gravity = Gravity.CENTER
                 }
@@ -212,7 +217,7 @@ class MainActivity : AppCompatActivity() {
     private fun selectRow(row: TableRow, record: FlightRecord) {
         selectedRow?.setBackgroundColor(Color.TRANSPARENT)
         selectedRow = row
-        selectedRow?.setBackgroundColor(Color.parseColor("#B3E5FC"))
+        selectedRow?.setBackgroundColor(Color.parseColor("#263238")) // ВЫДЕЛЕНИЕ СТРОКИ НА ТЕМНОМ ФОНЕ
         selectedRecord = record
         btnCopySelected.isEnabled = true
         tvStatus.text = "Выбрано включение №${record.number}"
