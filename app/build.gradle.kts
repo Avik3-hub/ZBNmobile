@@ -13,6 +13,12 @@ android {
         targetSdk = 34
         versionCode = 2
         versionName = "1.1"
+applicationVariants.all {
+        val variant = this
+        variant.outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output.outputFileName = "ZBNmobile_${variant.buildType.name}.apk"
+        }
     }
 
     compileOptions {
