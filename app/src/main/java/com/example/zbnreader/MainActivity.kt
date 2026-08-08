@@ -334,30 +334,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun copySelectedFlight() {
-        val record = selectedRecord ?: return
-        btnCopySelected.isEnabled = false
-        progressBar.visibility = View.VISIBLE
+    val record = selectedRecord ?: return
+    btnCopySelected.isEnabled = false
+    progressBar.visibility = View.VISIBLE
 
-        val currentIndex = flightList.indexOf(record)
-        val startOffset = record.sizeBytes // Начальное смещение выбранного включения
-        
-        // Вычисляем длину: разница между начальным адресом следующего полёта и текущего
-        val bytesToRead: Long? = if (currentIndex >= 0 && currentIndex < flightList.size - 1) {
-            flightList[currentIndex + 1].sizeBytes - startOffset
-        } else {
-            null // Для последнего включения читаем до конца данных
-        }
+    val currentIndex = flightList.indexOf(record)
+    val startOffset = record.sizeBytes
+    
+    val bytesToRead: Long? = if (currentIndex >= 0 && currentIndex < flightList.size - 1) {
+        flightList[currentIndex + 1].sizeBytes - startOffset
+    } else {
+        null
+    }
 
-        log("Скачивание включения №${record.number} (Смещение: $startOffset Б, Ожидаемый размер: ${bytesToRead ?: "До конца"} Б)...")
+    log("Запуск фонового скачивания включения №${record.number}...")
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-            val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-            if (drivers.isEmpty()) {
-                log("Ошибка: USB-конвертер не найден")
-                resetUi()
-                return@launch
-            }
+    // Запуск Foreground Service
+    val intent = Intent(this, FlightDownloadService::class.java).apply {
+        action = FlightDownloadService.ACTION_START_COPY
+        putExtra(FlightDownloadService.EXTRA_RECORD_NUMBER, record.number)
+        putExtra(FlightDownloadService.EXTRA_RECORD_DATE, record.date)
+        putExtra(FlightDownloadService.EXTRA_RECORD_FLIGHT, record.flightNum)
+        putExtra(FlightDownloadService.EXTRA_START_OFFSET, startOffset)
+        bytesToRead?.let { putExtra(FlightDownloadService.EXTRA_BYTES_TO_READ, it) }
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        startForegroundService(intent)
+    } else {
+        startService(intent)
+    }
+
+    resetUi()
+}
+
 
             val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device) ?: return@launch
