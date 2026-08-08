@@ -36,20 +36,18 @@ class MainActivity : AppCompatActivity() {
     private var selectedRecord: FlightRecord? = null
     private var selectedRow: TableRow? = null
 
-    // Экземпляр парсера оглавления
     private val tocParser = ZbnTocParser()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Главный контейнер
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 20, 20, 20)
             setBackgroundColor(Color.parseColor("#F5F5F5"))
         }
 
-        // 1. ВЕРХНЯЯ ПАНЕЛЬ: Статус и Настройки
+        // 1. ВЕРХНЯЯ ПАНЕЛЬ
         val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -73,7 +71,7 @@ class MainActivity : AppCompatActivity() {
         topPanel.addView(btnSettings)
         root.addView(topPanel)
 
-        // 2. КНОПКА СТАРТА РУКОПОЖАТИЯ И ЗАПРОСА ОГЛАВЛЕНИЯ
+        // 2. КНОПКА СТАРТА
         btnStart = Button(this).apply {
             text = "СЧИТАТЬ ОГЛАВЛЕНИЕ ЗБН"
             textSize = 16f
@@ -106,7 +104,7 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(progressBar)
 
-        // 5. ПАНЕЛЬ ДЕЙСТВИЙ (КОПИРОВАНИЕ / ДАМП)
+        // 5. ПАНЕЛЬ ДЕЙСТВИЙ
         val actionPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -128,7 +126,7 @@ class MainActivity : AppCompatActivity() {
         actionPanel.addView(btnFullDump)
         root.addView(actionPanel)
 
-        // 6. ОКНО КОНСОЛИ (ЛОГИ)
+        // 6. ОКНО КОНСОЛИ
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 220
@@ -143,8 +141,6 @@ class MainActivity : AppCompatActivity() {
         root.addView(scrollViewLog)
 
         setContentView(root)
-
-        // Отрисовка заглавной строки таблицы
         renderTableHeader()
     }
 
@@ -228,7 +224,6 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
         val currentBaudRate = prefs.getInt("baud_rate", 115200)
         
-        // Чтение лимита включений с двойной проверкой типа (String / Int)
         val sessionLimit = try {
             prefs.getInt("limit", 10)
         } catch (_: Exception) {
@@ -268,7 +263,6 @@ class MainActivity : AppCompatActivity() {
 
                 log("Порт открыт: $currentBaudRate 8N1")
 
-                // Рукопожатие: ENQ (0x05)
                 log("Отправка ENQ (0x05)...")
                 port.write(byteArrayOf(0x05), 1000)
 
@@ -282,8 +276,8 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 log("Получен ответ ACK (0x06)!")
-
                 log("Запрос оглавления включений (максимум: $sessionLimit)...")
+                
                 val records = readCatalog(port, sessionLimit)
 
                 runOnUiThread {
@@ -319,7 +313,6 @@ class MainActivity : AppCompatActivity() {
         val buffer = ByteArray(512)
         var noDataCounter = 0
 
-        // Читаем из порта, пока не наберем нужное число элементов или не истечет время
         while (flights.size < limit && noDataCounter < 3) {
             val count = port.read(buffer, 1000)
             if (count > 0) {
@@ -328,7 +321,6 @@ class MainActivity : AppCompatActivity() {
                 flights.addAll(parsedRecords)
                 log("Принято байт: $count | Считано включений: ${flights.size} / $limit")
 
-                // Прерываем считывание, как только достигли заданного лимита
                 if (flights.size >= limit) {
                     log("Достигнут заданный лимит ($limit включений). Считывание остановлено.")
                     break
@@ -342,8 +334,132 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun copySelectedFlight() {
-        val rec = selectedRecord ?: return
-        log("Запуск скачивания включения №${rec.number}...")
+        val record = selectedRecord ?: return
+        btnCopySelected.isEnabled = false
+        progressBar.visibility = View.VISIBLE
+
+        val currentIndex = flightList.indexOf(record)
+        val startOffset = record.sizeBytes // Начальное смещение выбранного включения
+        
+        // Вычисляем длину: разница между начальным адресом следующего полёта и текущего
+        val bytesToRead: Long? = if (currentIndex >= 0 && currentIndex < flightList.size - 1) {
+            flightList[currentIndex + 1].sizeBytes - startOffset
+        } else {
+            null // Для последнего включения читаем до конца данных
+        }
+
+        log("Скачивание включения №${record.number} (Смещение: $startOffset Б, Ожидаемый размер: ${bytesToRead ?: "До конца"} Б)...")
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+            val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+            if (drivers.isEmpty()) {
+                log("Ошибка: USB-конвертер не найден")
+                resetUi()
+                return@launch
+            }
+
+            val driver = drivers[0]
+            val connection = usbManager.openDevice(driver.device) ?: return@launch
+            val port = driver.ports[0]
+
+            try {
+                val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+                val baud = prefs.getInt("baud_rate", 115200)
+                port.open(connection)
+                port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+
+                // 1. Рукопожатие
+                port.write(byteArrayOf(0x05), 1000)
+                val ack = ByteArray(1)
+                port.read(ack, 1000)
+
+                // 2. Старт потока
+                port.write(byteArrayOf(0x4D.toByte()), 1000)
+
+                val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val fileName = "ZBN_FLIGHT_${record.number}_$timeStamp.bin"
+                val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+                val outputFile = File(downloadsDir, fileName)
+                val fos = FileOutputStream(outputFile)
+
+                val buffer = ByteArray(512)
+                var skippedBytes = 0L
+                var writtenBytes = 0L
+                var noDataCounter = 0
+
+                while (true) {
+                    val count = port.read(buffer, 1000)
+                    if (count > 0) {
+                        noDataCounter = 0
+                        
+                        // Пропускаем байты до начального адреса полета
+                        if (skippedBytes < startOffset) {
+                            val neededToSkip = startOffset - skippedBytes
+                            if (count <= neededToSkip) {
+                                skippedBytes += count
+                                continue
+                            } else {
+                                val validDataStart = neededToSkip.toInt()
+                                val validLength = count - validDataStart
+                                skippedBytes = startOffset
+                                
+                                val bytesToWrite = if (bytesToRead != null && (writtenBytes + validLength) > bytesToRead) {
+                                    (bytesToRead - writtenBytes).toInt()
+                                } else {
+                                    validLength
+                                }
+
+                                fos.write(buffer, validDataStart, bytesToWrite)
+                                writtenBytes += bytesToWrite
+                            }
+                        } else {
+                            // Записываем полезные данные полета
+                            val bytesToWrite = if (bytesToRead != null && (writtenBytes + count) > bytesToRead) {
+                                (bytesToRead - writtenBytes).toInt()
+                            } else {
+                                count
+                            }
+
+                            fos.write(buffer, 0, bytesToWrite)
+                            writtenBytes += bytesToWrite
+                        }
+
+                        log("Сохранено: $writtenBytes Б")
+
+                        if (bytesToRead != null && writtenBytes >= bytesToRead) {
+                            log("Достигнут конец включения №${record.number}")
+                            break
+                        }
+                    } else {
+                        noDataCounter++
+                        if (noDataCounter >= 3) break
+                    }
+                }
+
+                fos.flush()
+                fos.close()
+
+                val sysTypes = resources.getStringArray(R.array.system_types)
+                val arincTypes = resources.getStringArray(R.array.arinc_types)
+                val regSpeeds = resources.getStringArray(R.array.reg_speeds)
+
+                val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
+                val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
+                val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
+
+                saveFlightMetadata(fileName.removeSuffix(".bin"), sysType, arinc, regSpeed)
+
+                log("УСПЕХ! Включение №${record.number} сохранено ($writtenBytes Б)")
+                updateStatus("Статус: Сохранен рейс №${record.flightNum}")
+
+            } catch (e: Exception) {
+                log("Ошибка при выгрузке полета: ${e.message}")
+            } finally {
+                try { port.close() } catch (_: Exception) {}
+                resetUi()
+            }
+        }
     }
 
     private fun executeFullDumpCommand() {
@@ -460,6 +576,7 @@ class MainActivity : AppCompatActivity() {
     private fun resetUi() {
         runOnUiThread {
             btnStart.isEnabled = true
+            btnCopySelected.isEnabled = selectedRecord != null
             progressBar.visibility = View.GONE
         }
     }
