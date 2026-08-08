@@ -82,7 +82,7 @@ class MainActivity : AppCompatActivity() {
 
         // 2. КНОПКА СТАРТА
         btnStart = Button(this).apply {
-            text = "СЧИТАТЬ ОГЛАВЛЕНИЕ ЗБН"
+            text = "НАЧАТЬ СКАНИРОВАНИЕ"
             textSize = 16f
             setOnClickListener { startReading() }
         }
