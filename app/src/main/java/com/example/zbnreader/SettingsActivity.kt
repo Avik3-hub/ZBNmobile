@@ -1,4 +1,6 @@
-package com.example.zbnmobile // Замените на ваш package из MainActivity
+package com.example.zbnreader
+import com.example.zbnreader.R
+// Замените на ваш package из MainActivity
 
 import android.os.Bundle
 import android.widget.ArrayAdapter
@@ -16,7 +18,7 @@ class SettingsActivity : AppCompatActivity() {
         val btnSave = findViewById<Button>(R.id.btnSaveSettings)
 
         // Возможные скорости для RS-422
-        const val speeds = arrayOf("9600", "19200", "38400", "57600", "115200")
+        val speeds = arrayOf("9600", "19200", "38400", "57600", "115200")
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, speeds)
         spinnerBaudRate.adapter = adapter
 
