@@ -3,7 +3,7 @@ package com.example.zbnreader
 import android.content.Context
 import android.hardware.usb.UsbManager
 import com.hoho.android.usbserial.driver.UsbSerialPort
-import com.hoho.android.usbserial.driver.UsbSerialProposer
+import com.hoho.android.usbserial.driver.UsbSerialProber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -29,11 +29,75 @@ class RawFlightDataRecorder(private val context: Context) {
         val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
 
         // 1. Поиск подключенного USB-RS422 адаптера
-        val availableDrivers = UsbSerialProposer.getDefaultProposer().findAllDrivers(usbManager)
+        val availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
         if (availableDrivers.isEmpty()) {
             onError("USB-RS422 адаптер не обнаружен")
             return@withContext
         }
+
+        val driver = availableDrivers[0]
+        val connection = usbManager.openDevice(driver.device)
+            ?: run {
+                onError("Нет разрешения на доступ к USB-устройству")
+                return@withContext
+            }
+
+        // 2. Открытие и настройка COM-порта
+        try {
+            usbPort = driver.ports[0].apply {
+                open(connection)
+                setParameters(baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+            }
+        } catch (e: Exception) {
+            onError("Ошибка открытия порта: ${e.localizedMessage}")
+            return@withContext
+        }
+
+        // 3. Подготовка файла для записи сырых байт
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val fileName = "FLIGHT_LOG_$timeStamp.bin"
+        val outputDirectory = context.getExternalFilesDir(null) ?: context.filesDir
+        val outputFile = File(outputDirectory, fileName)
+
+        isRecording.set(true)
+        var totalBytesWritten = 0L
+
+        try {
+            // Поток прямой записи байтов на диск
+            FileOutputStream(outputFile, true).use { fileOutputStream ->
+                val buffer = ByteArray(8192) // Буфер приема на 8 КБ
+
+                while (isRecording.get()) {
+                    val bytesRead = usbPort?.read(buffer, 200) ?: 0
+
+                    if (bytesRead > 0) {
+                        // Запись чистых байтов без текстовых конвертаций
+                        fileOutputStream.write(buffer, 0, bytesRead)
+                        fileOutputStream.flush()
+
+                        totalBytesWritten += bytesRead
+                        onBytesRecorded(totalBytesWritten)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            onError("Ошибка записи: ${e.localizedMessage}")
+        } finally {
+            closePort()
+        }
+    }
+
+    fun stopRecording() {
+        isRecording.set(false)
+    }
+
+    private fun closePort() {
+        try {
+            usbPort?.close()
+        } catch (_: Exception) {}
+        usbPort = null
+    }
+}
 
         val driver = availableDrivers[0]
         val connection = usbManager.openDevice(driver.device)
