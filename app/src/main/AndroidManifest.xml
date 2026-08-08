@@ -10,7 +10,8 @@
         android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
         android:icon="@mipmap/my_logo"
 android:roundIcon="@mipmap/my_logo"
-
+<activity android:name=".SettingsActivity" android:exported="false" />
+        
         <activity
             android:name=".MainActivity"
             android:exported="true">
