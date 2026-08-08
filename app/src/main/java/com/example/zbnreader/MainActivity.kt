@@ -108,7 +108,7 @@ class MainActivity : AppCompatActivity() {
                 port.open(connection)
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
 val currentBaudRate = prefs.getInt("baud_rate", 115200)
-Port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                   port.dtr = false
                 port.rts = false
 
