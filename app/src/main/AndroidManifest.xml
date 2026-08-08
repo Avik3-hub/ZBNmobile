@@ -7,8 +7,8 @@
         android:allowBackup="true"
         android:label="СПИ ЗБН"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
-        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar"
+        android:icon="@mipmap/ic_launcher">
         
 <activity android:name=".SettingsActivity" android:exported="false" />
         
