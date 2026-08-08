@@ -106,8 +106,10 @@ class MainActivity : AppCompatActivity() {
             val port = driver.ports[0]
             try {
                 port.open(connection)
-                port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                port.dtr = false
+                val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+val currentBaudRate = prefs.getInt("baud_rate", 115200)
+Port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                  port.dtr = false
                 port.rts = false
 
                 log("Порт открыт: 115200 8N1")
