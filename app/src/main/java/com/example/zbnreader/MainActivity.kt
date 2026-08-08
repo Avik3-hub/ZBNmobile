@@ -30,52 +30,62 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnStart: Button
     private lateinit var progressBar: ProgressBar
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+        override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
-    // 1. Создаем главный контейнер
-    val root = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(40, 40, 40, 40)
-    }
-
-    // 2. Добавляем кнопку "Настройки"
-    val btnSettings = Button(this).apply {
-        text = "Настройки"
-        setOnClickListener {
-            val intent = Intent(this@MainActivity, SettingsActivity::class.java)
-            startActivity(intent)
+        // 1. Создаем главный контейнер
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
         }
-    }
-    root.addView(btnSettings)
 
-    // 3. Добавляем текстовый статус
-    tvStatus = TextView(this).apply {
-        text = "Статус: Подключите ЗБН и нажмите Считать"
-        textSize = 16f
-        setPadding(0, 0, 0, 20)
-    }
-    root.addView(tvStatus)
+        // 2. Кнопка "Настройки"
+        val btnSettings = Button(this).apply {
+            text = "Настройки"
+            setOnClickListener {
+                val intent = Intent(this@MainActivity, SettingsActivity::class.java)
+                startActivity(intent)
+            }
+        }
+        root.addView(btnSettings)
 
-    // 4. Добавляем кнопку "Считать ЗБН"
-    btnStart = Button(this).apply {
-        text = "СЧИТАТЬ ЗБН"
-        textSize = 18f
-        setOnClickListener { startReading() }
-    }
-    root.addView(btnStart)
+        // 3. Текстовый статус
+        tvStatus = TextView(this).apply {
+            text = "Статус: Подключите ЗБН и нажмите Считать"
+            textSize = 16f
+            setPadding(0, 0, 0, 20)
+        }
+        root.addView(tvStatus)
 
-    // 5. Добавляем полосу прогресса
-    progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-        isIndeterminate = true
-        visibility = View.GONE
-        setPadding(0, 20, 0, 20)
-    }
-    root.addView(progressBar)
+        // 4. Кнопка "Считать ЗБН"
+        btnStart = Button(this).apply {
+            text = "СЧИТАТЬ ЗБН"
+            textSize = 18f
+            setOnClickListener { startReading() }
+        }
+        root.addView(btnStart)
 
-    // 6. Отображаем весь созданный макет на экране
-    setContentView(root)
-}
+        // 5. Полоса прогресса
+        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = true
+            visibility = View.GONE
+            setPadding(0, 20, 0, 20)
+        }
+        root.addView(progressBar)
+
+        // 6. ИНИЦИАЛИЗАЦИЯ tvLog (окно для вывода логов с прокруткой)
+        val scrollView = ScrollView(this)
+        tvLog = TextView(this).apply {
+            textSize = 12f
+            setPadding(0, 20, 0, 0)
+        }
+        scrollView.addView(tvLog)
+        root.addView(scrollView)
+
+        // 7. Отображаем весь макет
+        setContentView(root)
+    }
+
 
     private fun log(message: String) {
         runOnUiThread { tvLog.append("$message\n") }
