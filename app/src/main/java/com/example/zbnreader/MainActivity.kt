@@ -475,7 +475,7 @@ class MainActivity : AppCompatActivity() {
                 val intent = Intent(this@MainActivity, SettingsActivity::class.java)
                 startActivity(intent)
             }
-        }
+    
         root.addView(btnSettings)
 
         // 3. Статус
