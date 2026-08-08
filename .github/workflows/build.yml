@@ -19,13 +19,10 @@ jobs:
         distribution: 'temurin'
 
     - name: Build Debug APK
-      run: |
-        gradle wrapper
-        ./gradlew assembleDebug --stacktrace
+      run: gradle assembleDebug --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: ZbnReader
         path: app/build/outputs/apk/debug/app-debug.apk
-        
