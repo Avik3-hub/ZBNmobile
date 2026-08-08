@@ -10,7 +10,6 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- 1. Тип системы регистрации -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -21,9 +20,9 @@
             android:id="@+id/spinnerSystemType"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="12dp"
+            android:entries="@array/system_types" />
 
-        <!-- 2. ARINC -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -34,9 +33,9 @@
             android:id="@+id/spinnerArinc"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="12dp"
+            android:entries="@array/arinc_types" />
 
-        <!-- 3. Скорость регистрации -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -47,9 +46,9 @@
             android:id="@+id/spinnerRegSpeed"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="12dp"
+            android:entries="@array/reg_speeds" />
 
-        <!-- 4. Интерфейс связи с ЗБН -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -60,9 +59,9 @@
             android:id="@+id/spinnerInterface"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="12dp"
+            android:entries="@array/interfaces" />
 
-        <!-- 5. Выбор USB / COM порта + Кнопка Поиск -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -88,7 +87,6 @@
                 android:text="Поиск" />
         </LinearLayout>
 
-        <!-- 6. Скорость обмена (Baud Rate) -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -99,9 +97,9 @@
             android:id="@+id/spinnerBaudRate"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="12dp"
+            android:entries="@array/baud_rates" />
 
-        <!-- 7. Выводить в списке включений -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -116,7 +114,6 @@
             android:inputType="number"
             android:text="10" />
 
-        <!-- Кнопка сохранения -->
         <Button
             android:id="@+id/btnSaveSettings"
             android:layout_width="match_parent"
