@@ -199,7 +199,7 @@ class MainActivity : AppCompatActivity() {
 
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val fileName = "ZBN_DUMP_$timeStamp.bin"
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
         val outputFile = File(downloadsDir, fileName)
         val fos = FileOutputStream(outputFile)
 
@@ -249,7 +249,7 @@ class MainActivity : AppCompatActivity() {
         arinc: String, 
         regSpeed: String
     ) {
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
         val metaFile = File(downloadsDir, "$binFileName.meta")
 
         val metaContent = """
