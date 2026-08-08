@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         tvStatus = TextView(this).apply {
-            text = "Статус: Подключите ЗБН и нажмите Считать"
+            text = "Статус: Подключите ЗБН и нажмите Начать Сканирование"
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE) // БЕЛЫЙ ТЕКСТ СТАТУСА
