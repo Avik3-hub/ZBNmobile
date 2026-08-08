@@ -242,10 +242,27 @@ private fun downloadFullDump(port: UsbSerialPort) {
         }
     }
 
-    fos.flush()
+        fos.flush()
     fos.close()
-    log("Файл сохранен: Загрузки/$fileName")
+
+    // Считываем текстовые названия из списков res/values/arrays.xml по индексам из SharedPreferences
+    val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+    val sysTypes = resources.getStringArray(R.array.system_types)
+    val arincTypes = resources.getStringArray(R.array.arinc_types)
+    val regSpeeds = resources.getStringArray(R.array.reg_speeds)
+
+    val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
+    val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
+    val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
+
+    log("Применение схемы кадра: $sysType | ARINC-$arinc | $regSpeed поз./с")
+
+    // Сохраняем текстовый паспорт файла
+    saveFlightMetadata(fileName.removeSuffix(".bin"), sysType, arinc, regSpeed)
+
+    log("УСПЕХ! Файл сохранен: Загрузки/$fileName")
     updateStatus("Статус: Готово ($totalBytes Б)")
+
 }
 
 
@@ -259,4 +276,32 @@ private fun downloadFullDump(port: UsbSerialPort) {
             progressBar.visibility = View.GONE
         }
     }
+}
+// Функция сохранения параметров полёта вместе с дампом
+private fun saveFlightMetadata(
+    binFileName: String, 
+    sysType: String, 
+    arinc: String, 
+    regSpeed: String
+) {
+    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    val metaFile = File(downloadsDir, "$binFileName.meta")
+
+    val metaContent = """
+        ========================================
+        МЕТАДАННЫЕ ПОЛЁТНОЙ ИНФОРМАЦИИ
+        ========================================
+        Имя файла дампа: $binFileName.bin
+        Дата скачивания: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}
+        
+        ПАРАМЕТРЫ СИСТЕМЫ:
+        • Тип системы регистрации: $sysType
+        • Протокол ARINC: $arinc
+        • Скорость регистрации: $regSpeed поз./с
+        • Длина субкадра: $regSpeed слов
+        ========================================
+    """.trimIndent()
+
+    metaFile.writeText(metaContent)
+    log("Метаданные сохранены: ${metaFile.name}")
 }
