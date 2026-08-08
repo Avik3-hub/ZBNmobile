@@ -1,9 +1,127 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Button 
+<ScrollView 
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/btnSettings"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:text="Настройки" />
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
 
+        <!-- 1. Тип системы регистрации -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Тип системы регистрации"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/spinnerSystemType"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 2. ARINC -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ARINC"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/spinnerArinc"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 3. Скорость регистрации -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Скорость регистрации (поз./с)"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/spinnerRegSpeed"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 4. Интерфейс связи с ЗБН -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Интерфейс связи с ЗБН"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/spinnerInterface"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 5. Выбор USB / COM порта + Кнопка Поиск -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="USB / COM порт"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:orientation="horizontal">
+
+            <Spinner
+                android:id="@+id/spinnerComPort"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/btnSearch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Поиск" />
+        </LinearLayout>
+
+        <!-- 6. Скорость обмена (Baud Rate) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Скорость обмена (Baud Rate)"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/spinnerBaudRate"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- 7. Выводить в списке включений -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Выводить в списке включений"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/etListLimit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:inputType="number"
+            android:text="10" />
+
+        <!-- Кнопка сохранения -->
+        <Button
+            android:id="@+id/btnSaveSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Сохранить настройки" />
+
+    </LinearLayout>
+</ScrollView>
