@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.hardware.usb.UsbManager
 import android.net.Uri
 import android.os.Build
@@ -30,6 +31,16 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
+    // Цветовая палитра в стиле Google Gemini (Dark Theme)
+    private val COLOR_BG = Color.parseColor("#131314")
+    private val COLOR_SURFACE = Color.parseColor("#1E1F20")
+    private val COLOR_SURFACE_CONTAINER = Color.parseColor("#28292A")
+    private val COLOR_ACCENT = Color.parseColor("#A8C7FA")
+    private val COLOR_ACCENT_TEXT = Color.parseColor("#041E49")
+    private val COLOR_TEXT = Color.parseColor("#E3E3E3")
+    private val COLOR_TEXT_MUTED = Color.parseColor("#C4C7C5")
+    private val COLOR_BORDER = Color.parseColor("#444746")
+
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
     private lateinit var btnStart: Button
@@ -46,33 +57,33 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 1. ЗАПРОС РАЗРЕШЕНИЙ
         checkAndRequestStoragePermissions()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 20, 20, 20)
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(COLOR_BG)
         }
 
         // 1. ВЕРХНЯЯ ПАНЕЛЬ
         val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, 10)
+            setPadding(0, 0, 0, 12)
         }
 
         tvStatus = TextView(this).apply {
-            text = "Статус: Подключите ЗБН и нажмите Начать Сканирование"
-            textSize = 14f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
+            text = "Статус: Подключите ЗБН и нажмите Начать"
+            textSize = 13f
+            setTextColor(COLOR_TEXT_MUTED)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
         val btnSettings = Button(this).apply {
             text = "Настройки"
+            textSize = 12f
+            setTextColor(COLOR_TEXT)
+            background = createRoundedDrawable(COLOR_SURFACE, 18f, COLOR_BORDER, 1)
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
@@ -82,21 +93,38 @@ class MainActivity : AppCompatActivity() {
         topPanel.addView(btnSettings)
         root.addView(topPanel)
 
-        // 2. КНОПКА СТАРТА
+        // 2. КНОПКА СТАРТА (Главная кнопка в стиле Gemini)
         btnStart = Button(this).apply {
             text = "НАЧАТЬ СКАНИРОВАНИЕ"
-            textSize = 16f
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(COLOR_ACCENT_TEXT)
+            background = createRoundedDrawable(COLOR_ACCENT, 24f)
+            setPadding(16, 26, 16, 26)
             setOnClickListener { startReading() }
         }
+        val startParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { setMargins(0, 0, 0, 14) }
+        btnStart.layoutParams = startParams
         root.addView(btnStart)
 
-        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ
-        val scrollTable = HorizontalScrollView(this).apply {
+        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ (Карточка)
+        val tableCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = createRoundedDrawable(COLOR_SURFACE, 20f)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+            ).apply { setMargins(0, 0, 0, 14) }
+            setPadding(10, 10, 10, 10)
+        }
+
+        val scrollTable = HorizontalScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT
             )
-            setBackgroundColor(Color.parseColor("#1E1E1E"))
-            setPadding(0, 10, 0, 10)
         }
 
         val verticalScroll = ScrollView(this)
@@ -105,7 +133,8 @@ class MainActivity : AppCompatActivity() {
         }
         verticalScroll.addView(tableLayout)
         scrollTable.addView(verticalScroll)
-        root.addView(scrollTable)
+        tableCard.addView(scrollTable)
+        root.addView(tableCard)
 
         // 4. ПОЛОСА ПРОГРЕССА
         progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -120,29 +149,38 @@ class MainActivity : AppCompatActivity() {
         val actionPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, 10, 0, 10)
+            setPadding(0, 0, 0, 14)
         }
 
-        val btnParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+        val btnParams = LinearLayout.LayoutParams(0, 110, 1f).apply {
             setMargins(4, 0, 4, 0)
         }
 
         btnCopySelected = Button(this).apply {
             text = "Копировать"
+            textSize = 12f
             isEnabled = false
+            setTextColor(COLOR_TEXT)
+            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 16f)
             layoutParams = btnParams
             setOnClickListener { copySelectedFlight() }
         }
 
         btnFullDump = Button(this).apply {
             text = "ВЕСЬ ЗБН"
+            textSize = 12f
+            setTextColor(COLOR_TEXT)
+            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 16f)
             layoutParams = btnParams
             setOnClickListener { executeFullDumpCommand() }
         }
 
         btnExportExcel = Button(this).apply {
             text = "В Excel"
+            textSize = 12f
             isEnabled = false
+            setTextColor(COLOR_TEXT)
+            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 16f)
             layoutParams = btnParams
             setOnClickListener { exportToExcel() }
         }
@@ -152,28 +190,50 @@ class MainActivity : AppCompatActivity() {
         actionPanel.addView(btnExportExcel)
         root.addView(actionPanel)
 
-        // 6. ОКНО КОНСОЛИ
+        // 6. ОКНО КОНСОЛИ (Карточка)
+        val logCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = createRoundedDrawable(COLOR_SURFACE, 20f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 200
+            )
+            setPadding(10, 10, 10, 10)
+        }
+
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 220
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT
             )
-            setBackgroundColor(Color.parseColor("#1E1E1E"))
         }
 
         tvLog = TextView(this).apply {
             textSize = 11f
-            setTextColor(Color.WHITE)
-            setPadding(10, 10, 10, 10)
+            setTextColor(COLOR_TEXT_MUTED)
+            setPadding(8, 8, 8, 8)
         }
 
         scrollViewLog.addView(tvLog)
-        root.addView(scrollViewLog)
+        logCard.addView(scrollViewLog)
+        root.addView(logCard)
 
         setContentView(root)
         renderTableHeader()
     }
 
-    // Автоматическое создание корневой папки при возврате в приложение из настроек прав
+    // Вспомогательная функция для создания скругленных фонов элементов
+    private fun createRoundedDrawable(backgroundColor: Int, radiusDp: Float, strokeColor: Int = 0, strokeWidthPx: Int = 0): GradientDrawable {
+        val radius = radiusDp * resources.displayMetrics.density
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(backgroundColor)
+            cornerRadius = radius
+            if (strokeWidthPx > 0) {
+                setStroke(strokeWidthPx, strokeColor)
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -187,7 +247,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Функция гарантированного создания корневой папки ZBNreader в памяти устройства
     private fun createMainDirectory() {
         try {
             val rootDir = Environment.getExternalStorageDirectory()
@@ -203,10 +262,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Проверка и запрос разрешений на доступ к памяти устройства
     private fun checkAndRequestStoragePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Для Android 11+ (API 30+)
             if (!Environment.isExternalStorageManager()) {
                 try {
                     val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
@@ -221,7 +278,6 @@ class MainActivity : AppCompatActivity() {
                 createMainDirectory()
             }
         } else {
-            // Для Android 10 и ниже
             val permissions = mutableListOf<String>()
             if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -258,10 +314,8 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread { tvLog.append("$message\n") }
     }
 
-    // Вспомогательная функция для автоматического создания/получения папки борта
     private fun getAircraftFolder(tailNum: String): File {
-        createMainDirectory() // Гарантируем существование корня
-        
+        createMainDirectory()
         val safeTail = tailNum.trim().replace(Regex("[^a-zA-Z0-9_А-Яа-я-]"), "_").ifEmpty { "Неизвестный_Борт" }
         val rootDir = Environment.getExternalStorageDirectory()
         val mainFolder = File(rootDir, "ZBNreader")
@@ -277,8 +331,8 @@ class MainActivity : AppCompatActivity() {
     private fun renderTableHeader() {
         tableLayout.removeAllViews()
         val headerRow = TableRow(this).apply {
-            setBackgroundColor(Color.parseColor("#333333"))
-            setPadding(5, 8, 5, 8)
+            setBackgroundColor(COLOR_SURFACE_CONTAINER)
+            setPadding(6, 10, 6, 10)
         }
 
         val columns = arrayOf(" № ", " Адрес/Размер ", " Дата ", " Время ", " Начало ", " Конец ", " Рейс ", " Борт ")
@@ -287,8 +341,8 @@ class MainActivity : AppCompatActivity() {
                 text = col
                 textSize = 12f
                 setTypeface(null, Typeface.BOLD)
-                setTextColor(Color.WHITE)
-                setPadding(8, 4, 8, 4)
+                setTextColor(COLOR_ACCENT)
+                setPadding(10, 4, 10, 4)
                 gravity = Gravity.CENTER
             }
             headerRow.addView(tv)
@@ -305,7 +359,7 @@ class MainActivity : AppCompatActivity() {
 
         records.forEach { record ->
             val row = TableRow(this).apply {
-                setPadding(5, 6, 5, 6)
+                setPadding(6, 8, 6, 8)
                 setOnClickListener { selectRow(this, record) }
             }
 
@@ -324,8 +378,8 @@ class MainActivity : AppCompatActivity() {
                 val tv = TextView(this).apply {
                     text = textVal
                     textSize = 12f
-                    setTextColor(Color.WHITE)
-                    setPadding(8, 4, 8, 4)
+                    setTextColor(COLOR_TEXT)
+                    setPadding(10, 4, 10, 4)
                     gravity = Gravity.CENTER
                 }
                 row.addView(tv)
@@ -337,7 +391,7 @@ class MainActivity : AppCompatActivity() {
     private fun selectRow(row: TableRow, record: FlightRecord) {
         selectedRow?.setBackgroundColor(Color.TRANSPARENT)
         selectedRow = row
-        selectedRow?.setBackgroundColor(Color.parseColor("#263238"))
+        selectedRow?.setBackgroundColor(COLOR_SURFACE_CONTAINER)
         selectedRecord = record
 
         btnCopySelected.isEnabled = true
