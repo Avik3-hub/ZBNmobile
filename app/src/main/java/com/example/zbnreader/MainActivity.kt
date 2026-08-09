@@ -25,6 +25,7 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
     private lateinit var btnStart: Button
@@ -65,7 +66,7 @@ class MainActivity : AppCompatActivity() {
             text = "Статус: Подключите ЗБН и нажмите Начать Сканирование"
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE) // БЕЛЫЙ ТЕКСТ СТАТУСА
+            setTextColor(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
@@ -88,7 +89,7 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(btnStart)
 
-        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ (ТЕМНЫЙ ФОН)
+        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ
         val scrollTable = HorizontalScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
@@ -107,7 +108,9 @@ class MainActivity : AppCompatActivity() {
 
         // 4. ПОЛОСА ПРОГРЕССА
         progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = true
+            isIndeterminate = false
+            max = 100
+            progress = 0
             visibility = View.GONE
         }
         root.addView(progressBar)
@@ -134,7 +137,7 @@ class MainActivity : AppCompatActivity() {
         actionPanel.addView(btnFullDump)
         root.addView(actionPanel)
 
-        // 6. ОКНО КОНСОЛИ (ТЕМНЫЙ ФОН)
+        // 6. ОКНО КОНСОЛИ
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 220
@@ -144,9 +147,10 @@ class MainActivity : AppCompatActivity() {
 
         tvLog = TextView(this).apply {
             textSize = 11f
-            setTextColor(Color.WHITE) // БЕЛЫЙ ТЕКСТ В КОНСОЛИ
+            setTextColor(Color.WHITE)
             setPadding(10, 10, 10, 10)
         }
+
         scrollViewLog.addView(tvLog)
         root.addView(scrollViewLog)
 
@@ -161,16 +165,17 @@ class MainActivity : AppCompatActivity() {
     private fun renderTableHeader() {
         tableLayout.removeAllViews()
         val headerRow = TableRow(this).apply {
-            setBackgroundColor(Color.parseColor("#333333")) // ТЕМНЫЙ ФОН ШАПКИ
+            setBackgroundColor(Color.parseColor("#333333"))
             setPadding(5, 8, 5, 8)
         }
+
         val columns = arrayOf(" № ", " Адрес/Размер ", " Дата ", " Время ", " Начало ", " Конец ", " Рейс ", " Борт ")
         for (col in columns) {
             val tv = TextView(this).apply {
                 text = col
                 textSize = 12f
                 setTypeface(null, Typeface.BOLD)
-                setTextColor(Color.WHITE) // БЕЛЫЙ ТЕКСТ ШАПКИ ТАБЛИЦЫ
+                setTextColor(Color.WHITE)
                 setPadding(8, 4, 8, 4)
                 gravity = Gravity.CENTER
             }
@@ -190,6 +195,7 @@ class MainActivity : AppCompatActivity() {
                 setPadding(5, 6, 5, 6)
                 setOnClickListener { selectRow(this, record) }
             }
+
             val fields = arrayOf(
                 record.number.toString(),
                 "${record.sizeBytes} Б",
@@ -200,11 +206,12 @@ class MainActivity : AppCompatActivity() {
                 record.flightNum,
                 record.tailNum
             )
+
             fields.forEach { textVal ->
                 val tv = TextView(this).apply {
                     text = textVal
                     textSize = 12f
-                    setTextColor(Color.WHITE) // БЕЛЫЙ ТЕКСТ В СТРОКАХ ТАБЛИЦЫ
+                    setTextColor(Color.WHITE)
                     setPadding(8, 4, 8, 4)
                     gravity = Gravity.CENTER
                 }
@@ -217,7 +224,7 @@ class MainActivity : AppCompatActivity() {
     private fun selectRow(row: TableRow, record: FlightRecord) {
         selectedRow?.setBackgroundColor(Color.TRANSPARENT)
         selectedRow = row
-        selectedRow?.setBackgroundColor(Color.parseColor("#263238")) // ВЫДЕЛЕНИЕ СТРОКИ НА ТЕМНОМ ФОНЕ
+        selectedRow?.setBackgroundColor(Color.parseColor("#263238"))
         selectedRecord = record
         btnCopySelected.isEnabled = true
         tvStatus.text = "Выбрано включение №${record.number}"
@@ -226,13 +233,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun startReading() {
         btnStart.isEnabled = false
+        progressBar.isIndeterminate = false
+        progressBar.max = 100
+        progressBar.progress = 0
         progressBar.visibility = View.VISIBLE
         tvLog.text = ""
         tvStatus.text = "Статус: Подключение..."
 
         val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
         val currentBaudRate = prefs.getInt("baud_rate", 115200)
-        
+
         val sessionLimit = try {
             prefs.getInt("limit", 10)
         } catch (_: Exception) {
@@ -284,7 +294,7 @@ class MainActivity : AppCompatActivity() {
 
                 log("Получен ответ ACK (0x06)!")
                 log("Запрос оглавления включений (максимум: $sessionLimit)...")
-                
+
                 val records = readCatalog(port, sessionLimit)
                 runOnUiThread {
                     flightList.clear()
@@ -313,7 +323,6 @@ class MainActivity : AppCompatActivity() {
         val flights = mutableListOf<FlightRecord>()
         log("Отправка команды 'M' (0x4D)...")
         port.write(byteArrayOf(0x4D.toByte()), 1000)
-
         val buffer = ByteArray(512)
         var noDataCounter = 0
 
@@ -324,6 +333,14 @@ class MainActivity : AppCompatActivity() {
                 val parsedRecords = tocParser.parseBuffer(buffer, count)
                 flights.addAll(parsedRecords)
                 log("Принято байт: $count | Считано включений: ${flights.size} / $limit")
+
+                val currentCount = flights.size.coerceAtMost(limit)
+                val percent = ((currentCount * 100) / limit).coerceAtMost(100)
+                runOnUiThread {
+                    progressBar.progress = percent
+                    tvStatus.text = "Статус: Поиск включений ($currentCount из $limit)... $percent%"
+                }
+
                 if (flights.size >= limit) {
                     log("Достигнут заданный лимит ($limit включений). Считывание остановлено.")
                     break
@@ -337,17 +354,27 @@ class MainActivity : AppCompatActivity() {
 
     private fun copySelectedFlight() {
         val record = selectedRecord ?: return
-        btnCopySelected.isEnabled = false
-        progressBar.visibility = View.VISIBLE
-        tvStatus.text = "Статус: Скачивание включения №${record.number}..."
 
         val currentIndex = flightList.indexOf(record)
         val startOffset = record.sizeBytes
-        
+
         val bytesToRead: Long? = if (currentIndex >= 0 && currentIndex < flightList.size - 1) {
             flightList[currentIndex + 1].sizeBytes - startOffset
         } else {
             null
+        }
+
+        btnCopySelected.isEnabled = false
+        progressBar.visibility = View.VISIBLE
+
+        if (bytesToRead != null && bytesToRead > 0) {
+            progressBar.isIndeterminate = false
+            progressBar.max = 100
+            progressBar.progress = 0
+            tvStatus.text = "Статус: Скачивание включения №${record.number} (0%)..."
+        } else {
+            progressBar.isIndeterminate = true
+            tvStatus.text = "Статус: Скачивание включения №${record.number}..."
         }
 
         log("Запуск фонового скачивания включения №${record.number}...")
@@ -375,6 +402,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
                 val baud = prefs.getInt("baud_rate", 115200)
+
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
 
@@ -386,7 +414,7 @@ class MainActivity : AppCompatActivity() {
                 // 2. Старт потока
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
 
-                // 3. Формирование имени по шаблону: ггггммдд_номерВключения_НАГИБИН (без расширения)
+                // 3. Имя файла
                 val dateFormatted = try {
                     val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
                     val parsedDate = inputFormat.parse(record.date.trim())
@@ -409,8 +437,7 @@ class MainActivity : AppCompatActivity() {
                     val count = port.read(buffer, 1000)
                     if (count > 0) {
                         noDataCounter = 0
-                        
-                        // Пропускаем байты до начального адреса полета
+
                         if (skippedBytes < startOffset) {
                             val neededToSkip = startOffset - skippedBytes
                             if (count <= neededToSkip) {
@@ -420,7 +447,7 @@ class MainActivity : AppCompatActivity() {
                                 val validDataStart = neededToSkip.toInt()
                                 val validLength = count - validDataStart
                                 skippedBytes = startOffset
-                                
+
                                 val bytesToWrite = if (bytesToRead != null && (writtenBytes + validLength) > bytesToRead) {
                                     (bytesToRead - writtenBytes).toInt()
                                 } else {
@@ -430,7 +457,6 @@ class MainActivity : AppCompatActivity() {
                                 writtenBytes += bytesToWrite
                             }
                         } else {
-                            // Записываем полезные данные полета
                             val bytesToWrite = if (bytesToRead != null && (writtenBytes + count) > bytesToRead) {
                                 (bytesToRead - writtenBytes).toInt()
                             } else {
@@ -439,7 +465,21 @@ class MainActivity : AppCompatActivity() {
                             fos.write(buffer, 0, bytesToWrite)
                             writtenBytes += bytesToWrite
                         }
+
                         log("Сохранено: $writtenBytes Б")
+
+                        // Обновляем прогресс-бар и текстовый статус в реальном времени
+                        val currentWritten = writtenBytes
+                        runOnUiThread {
+                            if (bytesToRead != null && bytesToRead > 0) {
+                                val percent = ((currentWritten * 100) / bytesToRead).toInt().coerceAtMost(100)
+                                progressBar.progress = percent
+                                tvStatus.text = "Статус: Скачивание №${record.number}... $percent% ($currentWritten / $bytesToRead Б)"
+                            } else {
+                                tvStatus.text = "Статус: Скачивание №${record.number}... ($currentWritten Б)"
+                            }
+                        }
+
                         if (bytesToRead != null && writtenBytes >= bytesToRead) {
                             log("Достигнут конец включения №${record.number}")
                             break
@@ -449,12 +489,14 @@ class MainActivity : AppCompatActivity() {
                         if (noDataCounter >= 3) break
                     }
                 }
+
                 fos.flush()
                 fos.close()
 
                 val sysTypes = resources.getStringArray(R.array.system_types)
                 val arincTypes = resources.getStringArray(R.array.arinc_types)
                 val regSpeeds = resources.getStringArray(R.array.reg_speeds)
+
                 val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
                 val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
                 val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
@@ -462,6 +504,7 @@ class MainActivity : AppCompatActivity() {
                 saveFlightMetadata(fileName, sysType, arinc, regSpeed)
                 log("УСПЕХ! Включение №${record.number} сохранено ($writtenBytes Б)")
                 updateStatus("Статус: Сохранен рейс №${record.flightNum}")
+
             } catch (e: Exception) {
                 log("Ошибка при выгрузке полета: ${e.message}")
             } finally {
@@ -473,17 +516,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun executeFullDumpCommand() {
         btnStart.isEnabled = false
+        progressBar.isIndeterminate = true
         progressBar.visibility = View.VISIBLE
+        tvStatus.text = "Статус: Чтение полного дампа..."
+
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
             if (drivers.isEmpty()) return@launch
+
             val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device) ?: return@launch
             val port = driver.ports[0]
+
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
                 val baud = prefs.getInt("baud_rate", 115200)
+
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                 downloadFullDump(port)
@@ -517,6 +566,11 @@ class MainActivity : AppCompatActivity() {
                 totalBytes += count
                 noDataCounter = 0
                 log("Принято: $totalBytes байт")
+
+                val currentTotal = totalBytes
+                runOnUiThread {
+                    tvStatus.text = "Статус: Чтение полного дампа... ($currentTotal Б)"
+                }
             } else {
                 noDataCounter++
                 if (noDataCounter >= 3) {
@@ -525,6 +579,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
         fos.flush()
         fos.close()
 
@@ -532,6 +587,7 @@ class MainActivity : AppCompatActivity() {
         val sysTypes = resources.getStringArray(R.array.system_types)
         val arincTypes = resources.getStringArray(R.array.arinc_types)
         val regSpeeds = resources.getStringArray(R.array.reg_speeds)
+
         val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
         val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
         val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
@@ -550,6 +606,7 @@ class MainActivity : AppCompatActivity() {
     ) {
         val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
         val metaFile = File(downloadsDir, "$binFileName.meta")
+
         val metaContent = """
             ========================================
             МЕТАДАННЫЕ ПОЛЁТНОЙ ИНФОРМАЦИИ
@@ -564,6 +621,7 @@ class MainActivity : AppCompatActivity() {
             • Длина субкадра: $regSpeed слов
             ========================================
         """.trimIndent()
+
         metaFile.writeText(metaContent)
         log("Метаданные сохранены: ${metaFile.name}")
     }
@@ -577,6 +635,8 @@ class MainActivity : AppCompatActivity() {
             btnStart.isEnabled = true
             btnCopySelected.isEnabled = selectedRecord != null
             progressBar.visibility = View.GONE
+            progressBar.isIndeterminate = false
+            progressBar.progress = 0
         }
     }
 }
