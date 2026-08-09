@@ -1,5 +1,6 @@
 package com.example.zbnreader
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
 import android.widget.Button
@@ -7,6 +8,8 @@ import android.widget.EditText
 import android.widget.Spinner
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
+import java.io.File
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -26,6 +29,7 @@ class SettingsActivity : AppCompatActivity() {
         val spinnerBaudRate = findViewById<Spinner>(R.id.spinnerBaudRate)
         val etListLimit = findViewById<EditText>(R.id.etListLimit)
         val btnSave = findViewById<Button>(R.id.btnSaveSettings)
+        val btnShareLog = findViewById<Button>(R.id.btnShareLog) // Находим кнопку лога
 
         val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
 
@@ -70,6 +74,35 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this, "Настройки сохранены!", Toast.LENGTH_SHORT).show()
             finish()
         }
+
+        // 4. Отправка лога при нажатии на кнопку
+        btnShareLog.setOnClickListener {
+            shareLogFile()
+        }
+    }
+
+    private fun shareLogFile() {
+        // Укажите точное имя файла, в который приложение записывает логи
+        val logFile = File(filesDir, "zbn_app_log.txt")
+
+        if (!logFile.exists() || logFile.length() == 0L) {
+            Toast.makeText(this, "Файл лога пуст или еще не создан", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.fileprovider",
+            logFile
+        )
+
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        startActivity(Intent.createChooser(shareIntent, "Отправить лог работы ЗБН"))
     }
 
     // Обработка нажатия на стрелку "Назад" в верхней панели
