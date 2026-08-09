@@ -18,6 +18,7 @@ import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -31,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnStart: Button
     private lateinit var btnCopySelected: Button
     private lateinit var btnFullDump: Button
+    private lateinit var btnExportExcel: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var tableLayout: TableLayout
 
@@ -115,26 +117,40 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(progressBar)
 
-        // 5. ПАНЕЛЬ ДЕЙСТВИЙ
+        // 5. ПАНЕЛЬ ДЕЙСТВИЙ (3 КНОПКИ)
         val actionPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(0, 10, 0, 10)
         }
 
+        val btnParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            setMargins(4, 0, 4, 0)
+        }
+
         btnCopySelected = Button(this).apply {
-            text = "Копировать включение"
+            text = "Копировать"
             isEnabled = false
+            layoutParams = btnParams
             setOnClickListener { copySelectedFlight() }
         }
 
         btnFullDump = Button(this).apply {
-            text = "Скачать ВЕСЬ ЗБН"
+            text = "ВЕСЬ ЗБН"
+            layoutParams = btnParams
             setOnClickListener { executeFullDumpCommand() }
+        }
+
+        btnExportExcel = Button(this).apply {
+            text = "В Excel"
+            isEnabled = false
+            layoutParams = btnParams
+            setOnClickListener { exportToExcel() }
         }
 
         actionPanel.addView(btnCopySelected)
         actionPanel.addView(btnFullDump)
+        actionPanel.addView(btnExportExcel)
         root.addView(actionPanel)
 
         // 6. ОКНО КОНСОЛИ
@@ -189,6 +205,7 @@ class MainActivity : AppCompatActivity() {
         selectedRecord = null
         selectedRow = null
         btnCopySelected.isEnabled = false
+        btnExportExcel.isEnabled = records.isNotEmpty()
 
         records.forEach { record ->
             val row = TableRow(this).apply {
@@ -643,6 +660,66 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ЭКСПОРТ ТАБЛИЦЫ ВКЛЮЧЕНИЙ В EXCEL (.XLSX)
+    private fun exportToExcel() {
+        if (flightList.isEmpty()) {
+            log("Ошибка: Таблица пуста, нечего экспортировать!")
+            updateStatus("Статус: Таблица пуста")
+            return
+        }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val workbook = XSSFWorkbook()
+                val sheet = workbook.createSheet("Лист1")
+
+                // Заголовки таблицы
+                val headerRow = sheet.createRow(0)
+                val headers = arrayOf("№", "Размер", "Дата", "ВремяЗап", "Начало", "Конец", "Рейс", "Борт", "Сбоев")
+                for ((index, header) in headers.withIndex()) {
+                    val cell = headerRow.createCell(index)
+                    cell.setCellValue(header)
+                }
+
+                // Заполнение строками
+                for ((rowIndex, record) in flightList.withIndex()) {
+                    val row = sheet.createRow(rowIndex + 1)
+                    row.createCell(0).setCellValue(record.number.toDouble())
+                    row.createCell(1).setCellValue(record.sizeBytes.toDouble())
+                    row.createCell(2).setCellValue(record.date)
+                    row.createCell(3).setCellValue(record.duration)
+                    row.createCell(4).setCellValue(record.startTime)
+                    row.createCell(5).setCellValue(record.endTime)
+                    
+                    record.flightNum.toDoubleOrNull()?.let { row.createCell(6).setCellValue(it) } 
+                        ?: row.createCell(6).setCellValue(record.flightNum)
+                        
+                    record.tailNum.toDoubleOrNull()?.let { row.createCell(7).setCellValue(it) } 
+                        ?: row.createCell(7).setCellValue(record.tailNum)
+
+                    row.createCell(8).setCellValue("") // Столбец Сбоев
+                }
+
+                val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val fileName = "Список_включений_$timeStamp.xlsx"
+                val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+                val outputFile = File(downloadsDir, fileName)
+
+                FileOutputStream(outputFile).use { fos ->
+                    workbook.write(fos)
+                }
+                workbook.close()
+
+                log("УСПЕХ! Excel создан: $fileName")
+                updateStatus("Статус: Excel сохранен ($fileName)")
+
+            } catch (e: Exception) {
+                log("Ошибка экспорта в Excel: ${e.message}")
+                updateStatus("Статус: Ошибка создания Excel")
+            }
+        }
+    }
+
     private fun saveFlightMetadata(
         binFileName: String,
         sysType: String,
@@ -679,6 +756,7 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             btnStart.isEnabled = true
             btnCopySelected.isEnabled = selectedRecord != null
+            btnExportExcel.isEnabled = flightList.isNotEmpty()
             progressBar.visibility = View.GONE
             progressBar.isIndeterminate = false
             progressBar.progress = 0
