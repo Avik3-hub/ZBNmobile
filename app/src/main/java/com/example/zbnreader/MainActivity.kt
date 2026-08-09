@@ -399,6 +399,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             val port = driver.ports[0]
+            var outputFile: File? = null
+
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
                 val baud = prefs.getInt("baud_rate", 115200)
@@ -425,7 +427,7 @@ class MainActivity : AppCompatActivity() {
 
                 val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
                 val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-                val outputFile = File(downloadsDir, fileName)
+                outputFile = File(downloadsDir, fileName)
                 val fos = FileOutputStream(outputFile)
 
                 val buffer = ByteArray(512)
@@ -468,7 +470,6 @@ class MainActivity : AppCompatActivity() {
 
                         log("Сохранено: $writtenBytes Б")
 
-                        // Обновляем прогресс-бар и текстовый статус в реальном времени
                         val currentWritten = writtenBytes
                         runOnUiThread {
                             if (bytesToRead != null && bytesToRead > 0) {
@@ -493,20 +494,37 @@ class MainActivity : AppCompatActivity() {
                 fos.flush()
                 fos.close()
 
-                val sysTypes = resources.getStringArray(R.array.system_types)
-                val arincTypes = resources.getStringArray(R.array.arinc_types)
-                val regSpeeds = resources.getStringArray(R.array.reg_speeds)
+                // ПРОВЕРКА ПОЛНОТЫ СКАЧАНИЯ
+                if (bytesToRead != null && writtenBytes < bytesToRead) {
+                    log("ОШИБКА: Скачивание прервано! Записано $writtenBytes из $bytesToRead Б")
+                    updateStatus("Статус: Ошибка (Передача прервана)")
+                    if (outputFile.exists()) {
+                        outputFile.delete()
+                        log("Недокачанный файл удален.")
+                    }
+                } else {
+                    val sysTypes = resources.getStringArray(R.array.system_types)
+                    val arincTypes = resources.getStringArray(R.array.arinc_types)
+                    val regSpeeds = resources.getStringArray(R.array.reg_speeds)
 
-                val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
-                val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
-                val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
+                    val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
+                    val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
+                    val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
-                saveFlightMetadata(fileName, sysType, arinc, regSpeed)
-                log("УСПЕХ! Включение №${record.number} сохранено ($writtenBytes Б)")
-                updateStatus("Статус: Сохранен рейс №${record.flightNum}")
+                    saveFlightMetadata(fileName, sysType, arinc, regSpeed)
+                    log("УСПЕХ! Включение №${record.number} сохранено ($writtenBytes Б)")
+                    updateStatus("Статус: Сохранен рейс №${record.flightNum}")
+                }
 
             } catch (e: Exception) {
                 log("Ошибка при выгрузке полета: ${e.message}")
+                updateStatus("Статус: Ошибка сбоя связи")
+                outputFile?.let {
+                    if (it.exists()) {
+                        it.delete()
+                        log("Удален поврежденный файл.")
+                    }
+                }
             } finally {
                 try { port.close() } catch (_: Exception) {}
                 resetUi()
@@ -538,6 +556,7 @@ class MainActivity : AppCompatActivity() {
                 downloadFullDump(port)
             } catch (e: Exception) {
                 log("Ошибка дампа: ${e.message}")
+                updateStatus("Статус: Ошибка дампа")
             } finally {
                 try { port.close() } catch (_: Exception) {}
                 resetUi()
