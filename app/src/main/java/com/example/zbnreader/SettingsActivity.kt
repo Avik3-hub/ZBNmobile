@@ -5,10 +5,14 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Environment
 import android.view.Gravity
-import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -102,6 +106,24 @@ class SettingsActivity : AppCompatActivity() {
         cardSpeed.addView(spinnerSpeed)
         container.addView(cardSpeed)
 
+        // 6. Карточка: Экспорт лога (Возвращенное меню)
+        val cardLog = createCardLayout()
+        val lblLog = createLabel("Диагностика и логи")
+        val btnExportLog = Button(this).apply {
+            text = "ВЫГРУЗИТЬ ЛОГ РАБОТЫ"
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(COLOR_TEXT)
+            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 16f, COLOR_BORDER, 1)
+            setPadding(16, 20, 16, 20)
+            setOnClickListener {
+                exportAppLog()
+            }
+        }
+        cardLog.addView(lblLog)
+        cardLog.addView(btnExportLog)
+        container.addView(cardLog)
+
         // Кнопка сохранения
         val btnSave = Button(this).apply {
             text = "СОХРАНИТЬ НАСТРОЙКИ"
@@ -136,6 +158,34 @@ class SettingsActivity : AppCompatActivity() {
 
         root.addView(container)
         setContentView(root)
+    }
+
+    private fun exportAppLog() {
+        try {
+            val rootDir = Environment.getExternalStorageDirectory()
+            val mainFolder = File(rootDir, "ZBNreader")
+            if (!mainFolder.exists()) {
+                mainFolder.mkdirs()
+            }
+            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val logFile = File(mainFolder, "app_log_$timeStamp.txt")
+
+            val sharedPrefs = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+            val logText = buildString {
+                appendLine("=== ZBN READER APP LOG ===")
+                appendLine("Дата/Время: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+                appendLine("Скорость передачи (Baud Rate): ${sharedPrefs.getInt("baud_rate", 115200)}")
+                appendLine("Лимит сканируемых включений: ${sharedPrefs.getInt("limit", 10)}")
+                appendLine("Тип системы регистрации: ${sharedPrefs.getInt("system_type", 0)}")
+                appendLine("Протокол ARINC: ${sharedPrefs.getInt("arinc", 0)}")
+                appendLine("Скорость регистрации: ${sharedPrefs.getInt("reg_speed", 0)}")
+            }
+
+            logFile.writeText(logText)
+            Toast.makeText(this, "Лог успешно сохранен в папку ZBNreader", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка сохранения лога: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun createCardLayout(): LinearLayout {
