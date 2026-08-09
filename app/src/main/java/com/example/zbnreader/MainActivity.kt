@@ -173,6 +173,36 @@ class MainActivity : AppCompatActivity() {
         renderTableHeader()
     }
 
+    // Автоматическое создание корневой папки при возврате в приложение из настроек прав
+    override fun onResume() {
+        super.onResume()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                createMainDirectory()
+            }
+        } else {
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                createMainDirectory()
+            }
+        }
+    }
+
+    // Функция гарантированного создания корневой папки ZBNreader в памяти устройства
+    private fun createMainDirectory() {
+        try {
+            val rootDir = Environment.getExternalStorageDirectory()
+            val mainFolder = File(rootDir, "ZBNreader")
+            if (!mainFolder.exists()) {
+                val created = mainFolder.mkdirs()
+                if (created) {
+                    log("Корневая папка 'ZBNreader' создана в памяти устройства")
+                }
+            }
+        } catch (e: Exception) {
+            log("Ошибка создания корневой папки: ${e.message}")
+        }
+    }
+
     // Проверка и запрос разрешений на доступ к памяти устройства
     private fun checkAndRequestStoragePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -187,6 +217,8 @@ class MainActivity : AppCompatActivity() {
                     val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
                     startActivity(intent)
                 }
+            } else {
+                createMainDirectory()
             }
         } else {
             // Для Android 10 и ниже
@@ -199,6 +231,8 @@ class MainActivity : AppCompatActivity() {
             }
             if (permissions.isNotEmpty()) {
                 requestPermissions(permissions.toTypedArray(), 102)
+            } else {
+                createMainDirectory()
             }
         }
 
@@ -209,22 +243,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 102 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            createMainDirectory()
+        }
+    }
+
     private fun log(message: String) {
         runOnUiThread { tvLog.append("$message\n") }
     }
 
     // Вспомогательная функция для автоматического создания/получения папки борта
     private fun getAircraftFolder(tailNum: String): File {
-        val safeTail = tailNum.trim().replace(Regex("[^a-zA-Z0-9_А-Яа-я-]"), "_").ifEmpty { "Неизвестный_Борт" }
+        createMainDirectory() // Гарантируем существование корня
         
-        // Папка ZBNreader прямо в корне внутренней памяти устройства
+        val safeTail = tailNum.trim().replace(Regex("[^a-zA-Z0-9_А-Яа-я-]"), "_").ifEmpty { "Неизвестный_Борт" }
         val rootDir = Environment.getExternalStorageDirectory()
         val mainFolder = File(rootDir, "ZBNreader")
         val aircraftFolder = File(mainFolder, "Борт_$safeTail")
 
         if (!aircraftFolder.exists()) {
             aircraftFolder.mkdirs()
-            log("Создана новая папка борта: ${aircraftFolder.name}")
+            log("Создана папка борта: ${aircraftFolder.name}")
         }
         return aircraftFolder
     }
@@ -494,7 +539,6 @@ class MainActivity : AppCompatActivity() {
 
                 val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
                 
-                // СОХРАНЕНИЕ В ПАПКУ БОРТА
                 val aircraftFolder = getAircraftFolder(record.tailNum)
                 outputFile = File(aircraftFolder, fileName)
                 val fos = FileOutputStream(outputFile)
