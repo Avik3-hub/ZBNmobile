@@ -50,7 +50,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // ЧЕРНЫЙ ФОН ВСЕГО ПРИЛОЖЕНИЯ
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 20, 20, 20)
@@ -117,7 +116,7 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(progressBar)
 
-        // 5. ПАНЕЛЬ ДЕЙСТВИЙ (3 КНОПКИ)
+        // 5. ПАНЕЛЬ ДЕЙСТВИЙ
         val actionPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -176,6 +175,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun log(message: String) {
         runOnUiThread { tvLog.append("$message\n") }
+    }
+
+    // Вспомогательная функция для автоматического создания/получения папки борта
+    private fun getAircraftFolder(tailNum: String): File {
+        val safeTail = tailNum.trim().replace(Regex("[^a-zA-Z0-9_А-Яа-я-]"), "_").ifEmpty { "Неизвестный_Борт" }
+        val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+        val aircraftFolder = File(downloadsDir, "Борт_$safeTail")
+        if (!aircraftFolder.exists()) {
+            aircraftFolder.mkdirs()
+            log("Создана новая папка борта: ${aircraftFolder.name}")
+        }
+        return aircraftFolder
     }
 
     private fun renderTableHeader() {
@@ -245,7 +256,7 @@ class MainActivity : AppCompatActivity() {
         selectedRecord = record
         btnCopySelected.isEnabled = true
         tvStatus.text = "Выбрано включение №${record.number}"
-        log("Выбрана строка: Включение №${record.number}, Рейс: ${record.flightNum}, Смещение: ${record.sizeBytes} Б")
+        log("Выбрана строка: Включение №${record.number}, Борт: ${record.tailNum}, Рейс: ${record.flightNum}")
     }
 
     private fun startReading() {
@@ -268,7 +279,7 @@ class MainActivity : AppCompatActivity() {
 
         log("Загружены настройки:")
         log(" • Скорость (Baud Rate): $currentBaudRate")
-        log(" • Лимит включений в списке: $sessionLimit")
+        log(" • Лимит включений: $sessionLimit")
 
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
@@ -310,7 +321,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 log("Получен ответ ACK (0x06)!")
-                log("Запрос оглавления включений (максимум: $sessionLimit)...")
+                log("Запрос оглавления...")
 
                 val records = readCatalog(port, sessionLimit)
                 runOnUiThread {
@@ -320,10 +331,10 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (records.isEmpty()) {
-                    log("Включения не найдены или CRC кадра не совпал.")
+                    log("Включения не найдены.")
                     updateStatus("Статус: Оглавление пусто")
                 } else {
-                    log("Успешно отображено включений: ${records.size} из $sessionLimit заданных")
+                    log("Успешно загружено включений: ${records.size}")
                     updateStatus("Статус: Загружено ${records.size} включений")
                 }
             } catch (e: Exception) {
@@ -358,10 +369,7 @@ class MainActivity : AppCompatActivity() {
                     tvStatus.text = "Статус: Поиск включений ($currentCount из $limit)... $percent%"
                 }
 
-                if (flights.size >= limit) {
-                    log("Достигнут заданный лимит ($limit включений). Считывание остановлено.")
-                    break
-                }
+                if (flights.size >= limit) break
             } else {
                 noDataCounter++
             }
@@ -388,13 +396,11 @@ class MainActivity : AppCompatActivity() {
             progressBar.isIndeterminate = false
             progressBar.max = 100
             progressBar.progress = 0
-            tvStatus.text = "Статус: Скачивание включения №${record.number} (0%)..."
+            tvStatus.text = "Статус: Скачивание №${record.number} (0%)..."
         } else {
             progressBar.isIndeterminate = true
-            tvStatus.text = "Статус: Скачивание включения №${record.number}..."
+            tvStatus.text = "Статус: Скачивание №${record.number}..."
         }
-
-        log("Запуск фонового скачивания включения №${record.number}...")
 
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
@@ -409,7 +415,7 @@ class MainActivity : AppCompatActivity() {
             val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
-                log("Ошибка: Нет разрешения на использование USB!")
+                log("Ошибка доступа к USB!")
                 updateStatus("Статус: Ошибка доступа к USB")
                 resetUi()
                 return@launch
@@ -425,15 +431,12 @@ class MainActivity : AppCompatActivity() {
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
 
-                // 1. Рукопожатие
                 port.write(byteArrayOf(0x05), 1000)
                 val ack = ByteArray(1)
                 port.read(ack, 1000)
 
-                // 2. Старт потока
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
 
-                // 3. Имя файла
                 val dateFormatted = try {
                     val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
                     val parsedDate = inputFormat.parse(record.date.trim())
@@ -443,8 +446,10 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
-                val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-                outputFile = File(downloadsDir, fileName)
+                
+                // СОХРАНЕНИЕ В ПАПКУ БОРТА
+                val aircraftFolder = getAircraftFolder(record.tailNum)
+                outputFile = File(aircraftFolder, fileName)
                 val fos = FileOutputStream(outputFile)
 
                 val buffer = ByteArray(512)
@@ -485,23 +490,18 @@ class MainActivity : AppCompatActivity() {
                             writtenBytes += bytesToWrite
                         }
 
-                        log("Сохранено: $writtenBytes Б")
-
                         val currentWritten = writtenBytes
                         runOnUiThread {
                             if (bytesToRead != null && bytesToRead > 0) {
                                 val percent = ((currentWritten * 100) / bytesToRead).toInt().coerceAtMost(100)
                                 progressBar.progress = percent
-                                tvStatus.text = "Статус: Скачивание №${record.number}... $percent% ($currentWritten / $bytesToRead Б)"
+                                tvStatus.text = "Статус: Скачивание №${record.number}... $percent%"
                             } else {
                                 tvStatus.text = "Статус: Скачивание №${record.number}... ($currentWritten Б)"
                             }
                         }
 
-                        if (bytesToRead != null && writtenBytes >= bytesToRead) {
-                            log("Достигнут конец включения №${record.number}")
-                            break
-                        }
+                        if (bytesToRead != null && writtenBytes >= bytesToRead) break
                     } else {
                         noDataCounter++
                         if (noDataCounter >= 3) break
@@ -511,14 +511,10 @@ class MainActivity : AppCompatActivity() {
                 fos.flush()
                 fos.close()
 
-                // ПРОВЕРКА ПОЛНОТЫ СКАЧАНИЯ
                 if (bytesToRead != null && writtenBytes < bytesToRead) {
                     log("ОШИБКА: Скачивание прервано! Записано $writtenBytes из $bytesToRead Б")
                     updateStatus("Статус: Ошибка (Передача прервана)")
-                    if (outputFile.exists()) {
-                        outputFile.delete()
-                        log("Недокачанный файл удален.")
-                    }
+                    if (outputFile.exists()) outputFile.delete()
                 } else {
                     val sysTypes = resources.getStringArray(R.array.system_types)
                     val arincTypes = resources.getStringArray(R.array.arinc_types)
@@ -528,20 +524,15 @@ class MainActivity : AppCompatActivity() {
                     val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
                     val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
-                    saveFlightMetadata(fileName, sysType, arinc, regSpeed)
-                    log("УСПЕХ! Включение №${record.number} сохранено ($writtenBytes Б)")
+                    saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
+                    log("УСПЕХ! Включение №${record.number} сохранено в папку 'Борт_${record.tailNum}'")
                     updateStatus("Статус: Сохранен рейс №${record.flightNum}")
                 }
 
             } catch (e: Exception) {
                 log("Ошибка при выгрузке полета: ${e.message}")
                 updateStatus("Статус: Ошибка сбоя связи")
-                outputFile?.let {
-                    if (it.exists()) {
-                        it.delete()
-                        log("Удален поврежденный файл.")
-                    }
-                }
+                outputFile?.let { if (it.exists()) it.delete() }
             } finally {
                 try { port.close() } catch (_: Exception) {}
                 resetUi()
@@ -568,7 +559,7 @@ class MainActivity : AppCompatActivity() {
             val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
-                log("Ошибка: Нет разрешения на использование USB!")
+                log("Ошибка доступа к USB!")
                 updateStatus("Статус: Ошибка доступа к USB")
                 resetUi()
                 return@launch
@@ -594,13 +585,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadFullDump(port: UsbSerialPort) {
-        log("Отправка команды 'M' (0x4D) для считывания всей памяти ЗБН...")
+        log("Отправка команды 'M' (0x4D)...")
         port.write(byteArrayOf(0x4D.toByte()), 1000)
 
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val fileName = "ZBN_DUMP_$timeStamp"
-        val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-        val outputFile = File(downloadsDir, fileName)
+        
+        // Определяем борт по считанному списку (если есть)
+        val tailNum = flightList.firstOrNull { it.tailNum.isNotBlank() }?.tailNum ?: "Дамп"
+        val aircraftFolder = getAircraftFolder(tailNum)
+        val outputFile = File(aircraftFolder, fileName)
         var fos: FileOutputStream? = null
 
         try {
@@ -631,7 +625,7 @@ class MainActivity : AppCompatActivity() {
 
             if (totalBytes == 0) {
                 log("ОШИБКА: Данные не получены!")
-                updateStatus("Статус: Ошибка (Нет данных от ЗБН)")
+                updateStatus("Статус: Ошибка (Нет данных)")
                 if (outputFile.exists()) outputFile.delete()
                 return
             }
@@ -645,25 +639,22 @@ class MainActivity : AppCompatActivity() {
             val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
             val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
-            saveFlightMetadata(fileName, sysType, arinc, regSpeed)
-            log("УСПЕХ! Весь ЗБН сохранен: $fileName ($totalBytes Б)")
+            saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
+            log("УСПЕХ! Весь ЗБН сохранен в папку '${aircraftFolder.name}' ($totalBytes Б)")
             updateStatus("Статус: Весь ЗБН сохранен ($totalBytes Б)")
 
         } catch (e: Exception) {
             log("Ошибка при чтении ЗБН: ${e.message}")
             updateStatus("Статус: Ошибка записи/чтения ЗБН")
             try { fos?.close() } catch (_: Exception) {}
-            if (outputFile.exists()) {
-                outputFile.delete()
-                log("Удален неполный файл ЗБН.")
-            }
+            if (outputFile.exists()) outputFile.delete()
         }
     }
 
-    // ЭКСПОРТ ТАБЛИЦЫ ВКЛЮЧЕНИЙ В EXCEL (.XLSX)
+    // ЭКСПОРТ ТАБЛИЦЫ В EXCEL (.XLSX) В ПАПКУ БОРТА
     private fun exportToExcel() {
         if (flightList.isEmpty()) {
-            log("Ошибка: Таблица пуста, нечего экспортировать!")
+            log("Ошибка: Таблица пуста!")
             updateStatus("Статус: Таблица пуста")
             return
         }
@@ -673,7 +664,6 @@ class MainActivity : AppCompatActivity() {
                 val workbook = XSSFWorkbook()
                 val sheet = workbook.createSheet("Лист1")
 
-                // Заголовки таблицы
                 val headerRow = sheet.createRow(0)
                 val headers = arrayOf("№", "Размер", "Дата", "ВремяЗап", "Начало", "Конец", "Рейс", "Борт", "Сбоев")
                 for ((index, header) in headers.withIndex()) {
@@ -681,7 +671,6 @@ class MainActivity : AppCompatActivity() {
                     cell.setCellValue(header)
                 }
 
-                // Заполнение строками
                 for ((rowIndex, record) in flightList.withIndex()) {
                     val row = sheet.createRow(rowIndex + 1)
                     row.createCell(0).setCellValue(record.number.toDouble())
@@ -697,20 +686,23 @@ class MainActivity : AppCompatActivity() {
                     record.tailNum.toDoubleOrNull()?.let { row.createCell(7).setCellValue(it) } 
                         ?: row.createCell(7).setCellValue(record.tailNum)
 
-                    row.createCell(8).setCellValue("") // Столбец Сбоев
+                    row.createCell(8).setCellValue("")
                 }
 
                 val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
                 val fileName = "Список_включений_$timeStamp.xlsx"
-                val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-                val outputFile = File(downloadsDir, fileName)
+
+                // Сохранение в папку первого борта из списка
+                val tailNum = flightList.firstOrNull { it.tailNum.isNotBlank() }?.tailNum ?: "Общий"
+                val aircraftFolder = getAircraftFolder(tailNum)
+                val outputFile = File(aircraftFolder, fileName)
 
                 FileOutputStream(outputFile).use { fos ->
                     workbook.write(fos)
                 }
                 workbook.close()
 
-                log("УСПЕХ! Excel создан: $fileName")
+                log("УСПЕХ! Excel сохранен в папку '${aircraftFolder.name}': $fileName")
                 updateStatus("Статус: Excel сохранен ($fileName)")
 
             } catch (e: Exception) {
@@ -721,13 +713,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveFlightMetadata(
+        folder: File,
         binFileName: String,
         sysType: String,
         arinc: String,
         regSpeed: String
     ) {
-        val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-        val metaFile = File(downloadsDir, "$binFileName.meta")
+        val metaFile = File(folder, "$binFileName.meta")
 
         val metaContent = """
             ========================================
@@ -745,7 +737,7 @@ class MainActivity : AppCompatActivity() {
         """.trimIndent()
 
         metaFile.writeText(metaContent)
-        log("Метаданные сохранены: ${metaFile.name}")
+        log("Метаданные сохранены в '${folder.name}/${metaFile.name}'")
     }
 
     private fun updateStatus(text: String) {
