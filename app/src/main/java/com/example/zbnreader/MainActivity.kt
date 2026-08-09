@@ -129,7 +129,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnFullDump = Button(this).apply {
-            text = "Полный дамп ('M')"
+            text = "Скачать ВЕСЬ ЗБН"
             setOnClickListener { executeFullDumpCommand() }
         }
 
@@ -536,7 +536,7 @@ class MainActivity : AppCompatActivity() {
         btnStart.isEnabled = false
         progressBar.isIndeterminate = true
         progressBar.visibility = View.VISIBLE
-        tvStatus.text = "Статус: Чтение полного дампа..."
+        tvStatus.text = "Статус: Чтение всего ЗБН..."
 
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
@@ -567,8 +567,8 @@ class MainActivity : AppCompatActivity() {
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                 downloadFullDump(port)
             } catch (e: Exception) {
-                log("Ошибка дампа: ${e.message}")
-                updateStatus("Статус: Ошибка дампа")
+                log("Ошибка считывания ЗБН: ${e.message}")
+                updateStatus("Статус: Ошибка скачивания ЗБН")
             } finally {
                 try { port.close() } catch (_: Exception) {}
                 resetUi()
@@ -577,7 +577,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadFullDump(port: UsbSerialPort) {
-        log("Отправка команды 'M' (0x4D) для считывания всей памяти...")
+        log("Отправка команды 'M' (0x4D) для считывания всей памяти ЗБН...")
         port.write(byteArrayOf(0x4D.toByte()), 1000)
 
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
@@ -601,7 +601,7 @@ class MainActivity : AppCompatActivity() {
 
                     val currentTotal = totalBytes
                     runOnUiThread {
-                        tvStatus.text = "Статус: Чтение полного дампа... ($currentTotal Б)"
+                        tvStatus.text = "Статус: Чтение всего ЗБН... ($currentTotal Б)"
                     }
                 } else {
                     noDataCounter++
@@ -629,16 +629,16 @@ class MainActivity : AppCompatActivity() {
             val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
             saveFlightMetadata(fileName, sysType, arinc, regSpeed)
-            log("УСПЕХ! Полный дамп сохранен: $fileName ($totalBytes Б)")
-            updateStatus("Статус: Дамп сохранен ($totalBytes Б)")
+            log("УСПЕХ! Весь ЗБН сохранен: $fileName ($totalBytes Б)")
+            updateStatus("Статус: Весь ЗБН сохранен ($totalBytes Б)")
 
         } catch (e: Exception) {
-            log("Ошибка при чтении дампа: ${e.message}")
-            updateStatus("Статус: Ошибка записи/чтения дампа")
+            log("Ошибка при чтении ЗБН: ${e.message}")
+            updateStatus("Статус: Ошибка записи/чтения ЗБН")
             try { fos?.close() } catch (_: Exception) {}
             if (outputFile.exists()) {
                 outputFile.delete()
-                log("Удален неполный файл дампа.")
+                log("Удален неполный файл ЗБН.")
             }
         }
     }
