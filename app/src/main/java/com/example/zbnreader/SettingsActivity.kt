@@ -1,116 +1,186 @@
 package com.example.zbnreader
 
-import android.content.Intent
+import android.content.Context
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import android.view.MenuItem
-import android.widget.Button
-import android.widget.EditText
-import android.widget.Spinner
-import android.widget.Toast
+import android.view.Gravity
+import android.view.View
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.FileProvider
-import java.io.File
 
 class SettingsActivity : AppCompatActivity() {
 
+    private val COLOR_BG = Color.parseColor("#131314")
+    private val COLOR_SURFACE = Color.parseColor("#1E1F20")
+    private val COLOR_SURFACE_CONTAINER = Color.parseColor("#28292A")
+    private val COLOR_ACCENT = Color.parseColor("#A8C7FA")
+    private val COLOR_ACCENT_TEXT = Color.parseColor("#041E49")
+    private val COLOR_TEXT = Color.parseColor("#E3E3E3")
+    private val COLOR_TEXT_MUTED = Color.parseColor("#C4C7C5")
+    private val COLOR_BORDER = Color.parseColor("#444746")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_settings)
 
-        // Включаем стрелку "Назад" в верхней панели (ActionBar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "Настройки приложения"
+        val prefs = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
 
-        // 1. Находим элементы UI по их ID
-        val spinnerSystemType = findViewById<Spinner>(R.id.spinnerSystemType)
-        val spinnerArinc = findViewById<Spinner>(R.id.spinnerArinc)
-        val spinnerRegSpeed = findViewById<Spinner>(R.id.spinnerRegSpeed)
-        val spinnerInterface = findViewById<Spinner>(R.id.spinnerInterface)
-        val spinnerBaudRate = findViewById<Spinner>(R.id.spinnerBaudRate)
-        val etListLimit = findViewById<EditText>(R.id.etListLimit)
-        val btnSave = findViewById<Button>(R.id.btnSaveSettings)
-        val btnShareLog = findViewById<Button>(R.id.btnShareLog) // Находим кнопку лога
+        val root = ScrollView(this).apply {
+            setBackgroundColor(COLOR_BG)
+            setFillViewport(true)
+        }
 
-        val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+        }
 
-        // 2. Читаем ранее сохраненные значения
-        spinnerSystemType.setSelection(prefs.getInt("system_type", 0))
+        // Заголовок экрана
+        val tvTitle = TextView(this).apply {
+            text = "Настройки приложения"
+            textSize = 20f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(COLOR_TEXT)
+            setPadding(0, 0, 0, 24)
+        }
+        container.addView(tvTitle)
+
+        // 1. Карточка: Скорость передачи (Baud Rate)
+        val cardBaud = createCardLayout()
+        val lblBaud = createLabel("Скорость передачи (Baud Rate)")
+        val spinnerBaud = createSpinner(arrayOf("9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"))
+        
+        val currentBaud = prefs.getInt("baud_rate", 115200)
+        val baudValues = arrayOf(9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600)
+        spinnerBaud.setSelection(baudValues.indexOf(currentBaud).coerceAtLeast(4))
+
+        cardBaud.addView(lblBaud)
+        cardBaud.addView(spinnerBaud)
+        container.addView(cardBaud)
+
+        // 2. Карточка: Лимит включений
+        val cardLimit = createCardLayout()
+        val lblLimit = createLabel("Лимит сканируемых включений")
+        val inputLimit = EditText(this).apply {
+            textSize = 14f
+            setTextColor(COLOR_TEXT)
+            setHintTextColor(COLOR_TEXT_MUTED)
+            setText(prefs.getInt("limit", 10).toString())
+            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 12f, COLOR_BORDER, 1)
+            setPadding(24, 24, 24, 24)
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        cardLimit.addView(lblLimit)
+        cardLimit.addView(inputLimit)
+        container.addView(cardLimit)
+
+        // 3. Карточка: Тип системы регистрации
+        val cardSys = createCardLayout()
+        val lblSys = createLabel("Тип системы регистрации")
+        val spinnerSys = createSpinner(resources.getStringArray(R.array.system_types))
+        spinnerSys.setSelection(prefs.getInt("system_type", 0))
+        cardSys.addView(lblSys)
+        cardSys.addView(spinnerSys)
+        container.addView(cardSys)
+
+        // 4. Карточка: Протокол ARINC
+        val cardArinc = createCardLayout()
+        val lblArinc = createLabel("Протокол ARINC")
+        val spinnerArinc = createSpinner(resources.getStringArray(R.array.arinc_types))
         spinnerArinc.setSelection(prefs.getInt("arinc", 0))
-        spinnerRegSpeed.setSelection(prefs.getInt("reg_speed", 0))
-        spinnerInterface.setSelection(prefs.getInt("interface", 0))
+        cardArinc.addView(lblArinc)
+        cardArinc.addView(spinnerArinc)
+        container.addView(cardArinc)
 
-        // Восстанавливаем сохраненную скорость обмена (Baud Rate)
-        val savedSpeed = prefs.getInt("baud_rate", 115200).toString()
-        val baudRates = resources.getStringArray(R.array.baud_rates)
-        val speedIndex = baudRates.indexOf(savedSpeed)
-        if (speedIndex >= 0) {
-            spinnerBaudRate.setSelection(speedIndex)
+        // 5. Карточка: Скорость регистрации
+        val cardSpeed = createCardLayout()
+        val lblSpeed = createLabel("Скорость регистрации")
+        val spinnerSpeed = createSpinner(resources.getStringArray(R.array.reg_speeds))
+        spinnerSpeed.setSelection(prefs.getInt("reg_speed", 0))
+        cardSpeed.addView(lblSpeed)
+        cardSpeed.addView(spinnerSpeed)
+        container.addView(cardSpeed)
+
+        // Кнопка сохранения
+        val btnSave = Button(this).apply {
+            text = "СОХРАНИТЬ НАСТРОЙКИ"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(COLOR_ACCENT_TEXT)
+            background = createRoundedDrawable(COLOR_ACCENT, 24f)
+            setPadding(16, 26, 16, 26)
+            setOnClickListener {
+                val selectedBaud = baudValues[spinnerBaud.selectedItemPosition]
+                val limitVal = inputLimit.text.toString().toIntOrNull() ?: 10
+
+                prefs.edit().apply {
+                    putInt("baud_rate", selectedBaud)
+                    putInt("limit", limitVal)
+                    putInt("system_type", spinnerSys.selectedItemPosition)
+                    putInt("arinc", spinnerArinc.selectedItemPosition)
+                    putInt("reg_speed", spinnerSpeed.selectedItemPosition)
+                    apply()
+                }
+
+                Toast.makeText(this@SettingsActivity, "Настройки успешно сохранены", Toast.LENGTH_SHORT).show()
+                finish()
+            }
         }
+        val saveParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { setMargins(0, 16, 0, 24) }
+        btnSave.layoutParams = saveParams
+        container.addView(btnSave)
 
-        // Восстанавливаем число вывода в списке
-        etListLimit.setText(prefs.getString("limit", "10"))
+        root.addView(container)
+        setContentView(root)
+    }
 
-        // 3. Сохранение при нажатии на кнопку
-        btnSave.setOnClickListener {
-            val editor = prefs.edit()
-
-            editor.putInt("system_type", spinnerSystemType.selectedItemPosition)
-            editor.putInt("arinc", spinnerArinc.selectedItemPosition)
-            editor.putInt("reg_speed", spinnerRegSpeed.selectedItemPosition)
-            editor.putInt("interface", spinnerInterface.selectedItemPosition)
-
-            // Сохраняем выбранную скорость как число (например, 921600 или 115200)
-            val selectedSpeedStr = spinnerBaudRate.selectedItem.toString()
-            val baudRateInt = selectedSpeedStr.toIntOrNull() ?: 115200
-            editor.putInt("baud_rate", baudRateInt)
-
-            // Проверка поля ввода лимита на пустоту
-            val limitText = etListLimit.text.toString().trim()
-            val safeLimit = if (limitText.isEmpty() || limitText.toIntOrNull() == 0) "10" else limitText
-            editor.putString("limit", safeLimit)
-
-            editor.apply()
-
-            Toast.makeText(this, "Настройки сохранены!", Toast.LENGTH_SHORT).show()
-            finish()
+    private fun createCardLayout(): LinearLayout {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = createRoundedDrawable(COLOR_SURFACE, 20f)
+            setPadding(24, 24, 24, 24)
         }
+        val params = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { setMargins(0, 0, 0, 16) }
+        card.layoutParams = params
+        return card
+    }
 
-        // 4. Отправка лога при нажатии на кнопку
-        btnShareLog.setOnClickListener {
-            shareLogFile()
+    private fun createLabel(text: String): TextView {
+        return TextView(this).apply {
+            this.text = text
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(COLOR_ACCENT)
+            setPadding(0, 0, 0, 12)
         }
     }
 
-    private fun shareLogFile() {
-        // Укажите точное имя файла, в который приложение записывает логи
-        val logFile = File(filesDir, "zbn_app_log.txt")
-
-        if (!logFile.exists() || logFile.length() == 0L) {
-            Toast.makeText(this, "Файл лога пуст или еще не создан", Toast.LENGTH_SHORT).show()
-            return
+    private fun createSpinner(items: Array<String>): Spinner {
+        val spinner = Spinner(this).apply {
+            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 12f, COLOR_BORDER, 1)
+            setPadding(16, 16, 16, 16)
         }
-
-        val uri = FileProvider.getUriForFile(
-            this,
-            "$packageName.fileprovider",
-            logFile
-        )
-
-        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        startActivity(Intent.createChooser(shareIntent, "Отправить лог работы ЗБН"))
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
+        spinner.adapter = adapter
+        return spinner
     }
 
-    // Обработка нажатия на стрелку "Назад" в верхней панели
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) {
-            finish()
-            return true
+    private fun createRoundedDrawable(backgroundColor: Int, radiusDp: Float, strokeColor: Int = 0, strokeWidthPx: Int = 0): GradientDrawable {
+        val radius = radiusDp * resources.displayMetrics.density
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(backgroundColor)
+            cornerRadius = radius
+            if (strokeWidthPx > 0) {
+                setStroke(strokeWidthPx, strokeColor)
+            }
         }
-        return super.onOptionsItemSelected(item)
     }
 }
