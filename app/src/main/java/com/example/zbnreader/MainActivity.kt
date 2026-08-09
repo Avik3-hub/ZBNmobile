@@ -31,7 +31,7 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
-    // Цветовая палитра в стиле Google Gemini (Dark Theme)
+    // Цветовая палитра в стиле Google Gemini (Dark Theme) с добавлением статусных цветов
     private val COLOR_BG = Color.parseColor("#131314")
     private val COLOR_SURFACE = Color.parseColor("#1E1F20")
     private val COLOR_SURFACE_CONTAINER = Color.parseColor("#28292A")
@@ -40,6 +40,10 @@ class MainActivity : AppCompatActivity() {
     private val COLOR_TEXT = Color.parseColor("#E3E3E3")
     private val COLOR_TEXT_MUTED = Color.parseColor("#C4C7C5")
     private val COLOR_BORDER = Color.parseColor("#444746")
+
+    // Статусные цвета для строк таблицы
+    private val COLOR_DOWNLOADED = Color.parseColor("#1A3852") // Нежно-голубой для скачанных
+    private val COLOR_ERROR = Color.parseColor("#4A2828")      // Бледно-красный для ошибок
 
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
@@ -54,6 +58,10 @@ class MainActivity : AppCompatActivity() {
     private var selectedRecord: FlightRecord? = null
     private var selectedRow: TableRow? = null
     private val tocParser = ZbnTocParser()
+
+    // Наборы для отслеживания статусов скачивания в текущей сессии
+    private val downloadedRecordNumbers = mutableSetOf<Int>()
+    private val errorRecordNumbers = mutableSetOf<Int>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,7 +101,7 @@ class MainActivity : AppCompatActivity() {
         topPanel.addView(btnSettings)
         root.addView(topPanel)
 
-        // 2. КНОПКА СТАРТА (Главная кнопка в стиле Gemini)
+        // 2. КНОПКА СТАРТА
         btnStart = Button(this).apply {
             text = "НАЧАТЬ СКАНИРОВАНИЕ"
             textSize = 14f
@@ -221,7 +229,6 @@ class MainActivity : AppCompatActivity() {
         renderTableHeader()
     }
 
-    // Вспомогательная функция для создания скругленных фонов элементов
     private fun createRoundedDrawable(backgroundColor: Int, radiusDp: Float, strokeColor: Int = 0, strokeWidthPx: Int = 0): GradientDrawable {
         val radius = radiusDp * resources.displayMetrics.density
         return GradientDrawable().apply {
@@ -328,6 +335,24 @@ class MainActivity : AppCompatActivity() {
         return aircraftFolder
     }
 
+    // Проверка, существует ли уже скачанный файл для конкретного рейса на диске
+    private fun isFlightDownloaded(record: FlightRecord): Boolean {
+        return try {
+            val dateFormatted = try {
+                val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
+                val parsedDate = inputFormat.parse(record.date.trim())
+                SimpleDateFormat("yyyyMMdd", Locale.US).format(parsedDate ?: Date())
+            } catch (e: Exception) {
+                SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+            }
+            val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
+            val aircraftFolder = getAircraftFolder(record.tailNum)
+            File(aircraftFolder, fileName).exists()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private fun renderTableHeader() {
         tableLayout.removeAllViews()
         val headerRow = TableRow(this).apply {
@@ -363,6 +388,13 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { selectRow(this, record) }
             }
 
+            // Установка фонового цвета строки в зависимости от статуса (ошибка, скачано или обычно)
+            when {
+                errorRecordNumbers.contains(record.number) -> row.setBackgroundColor(COLOR_ERROR)
+                isFlightDownloaded(record) || downloadedRecordNumbers.contains(record.number) -> row.setBackgroundColor(COLOR_DOWNLOADED)
+                else -> row.setBackgroundColor(Color.TRANSPARENT)
+            }
+
             val fields = arrayOf(
                 record.number.toString(),
                 "${record.sizeBytes} Б",
@@ -389,7 +421,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun selectRow(row: TableRow, record: FlightRecord) {
-        selectedRow?.setBackgroundColor(Color.TRANSPARENT)
+        // Возвращаем предыдущей выбранной строке её исходный статус (скачана / ошибка / обычная)
+        selectedRow?.let { prevRow ->
+            val prevIndex = tableLayout.indexOfChild(prevRow) - 1
+            if (prevIndex >= 0 && prevIndex < flightList.size) {
+                val prevRecord = flightList[prevIndex]
+                when {
+                    errorRecordNumbers.contains(prevRecord.number) -> prevRow.setBackgroundColor(COLOR_ERROR)
+                    isFlightDownloaded(prevRecord) || downloadedRecordNumbers.contains(prevRecord.number) -> prevRow.setBackgroundColor(COLOR_DOWNLOADED)
+                    else -> prevRow.setBackgroundColor(Color.TRANSPARENT)
+                }
+            }
+        }
+
         selectedRow = row
         selectedRow?.setBackgroundColor(COLOR_SURFACE_CONTAINER)
         selectedRecord = record
@@ -554,6 +598,8 @@ class MainActivity : AppCompatActivity() {
             if (drivers.isEmpty()) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен!")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
+                errorRecordNumbers.add(record.number)
+                runOnUiThread { updateTableUI(flightList) }
                 resetUi()
                 return@launch
             }
@@ -563,6 +609,8 @@ class MainActivity : AppCompatActivity() {
             if (connection == null) {
                 log("Ошибка доступа к USB!")
                 updateStatus("Статус: Ошибка доступа к USB")
+                errorRecordNumbers.add(record.number)
+                runOnUiThread { updateTableUI(flightList) }
                 resetUi()
                 return@launch
             }
@@ -660,6 +708,7 @@ class MainActivity : AppCompatActivity() {
                 if (bytesToRead != null && writtenBytes < bytesToRead) {
                     log("ОШИБКА: Скачивание прервано! Записано $writtenBytes из $bytesToRead Б")
                     updateStatus("Статус: Ошибка (Передача прервана)")
+                    errorRecordNumbers.add(record.number)
                     if (outputFile.exists()) outputFile.delete()
                 } else {
                     val sysTypes = resources.getStringArray(R.array.system_types)
@@ -671,14 +720,23 @@ class MainActivity : AppCompatActivity() {
                     val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
                     saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
+                    
+                    // Помечаем как успешно скачанное
+                    downloadedRecordNumbers.add(record.number)
+                    errorRecordNumbers.remove(record.number)
+
                     log("УСПЕХ! Включение №${record.number} сохранено в 'ZBNreader/Борт_${record.tailNum}'")
                     updateStatus("Статус: Сохранен рейс №${record.flightNum}")
                 }
+                
+                runOnUiThread { updateTableUI(flightList) }
 
             } catch (e: Exception) {
                 log("Ошибка при выгрузке полета: ${e.message}")
                 updateStatus("Статус: Ошибка сбоя связи")
+                errorRecordNumbers.add(record.number)
                 outputFile?.let { if (it.exists()) it.delete() }
+                runOnUiThread { updateTableUI(flightList) }
             } finally {
                 try { port.close() } catch (_: Exception) {}
                 resetUi()
