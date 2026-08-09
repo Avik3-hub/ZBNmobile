@@ -37,7 +37,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("com.github.mik3y:usb-serial-for-android:3.9.0")
-
+implementation 'org.apache.poi:poi-ooxml:5.2.3'
     // Корутины для чтения RS-422 и записи в файл в фоновом потоке
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
     // lifecycleScope для безопасного запуска задач из Activity
