@@ -1,19 +1,19 @@
 package com.example.zbnreader
 
-import android.content.BroadcastReceiver
+import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.hardware.usb.UsbManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
-import android.view.WindowManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -44,34 +44,19 @@ class MainActivity : AppCompatActivity() {
     private var selectedRow: TableRow? = null
     private val tocParser = ZbnTocParser()
 
-    // СЛУШАТЕЛЬ ФИЗИЧЕСКОГО ОТКЛЮЧЕНИЯ USB-КАБЕЛЯ
-    private val usbReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (UsbManager.ACTION_USB_DEVICE_DETACHED == intent?.action) {
-                log("КРИТИЧЕСКАЯ ОШИБКА: USB-адаптер отключен!")
-                updateStatus("Статус: Кабель отключен!")
-                resetUi()
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
-            }
-        }
+        // 1. ЗАПРОС РАЗРЕШЕНИЙ
+        checkAndRequestStoragePermissions()
 
-        // РАЗМЕТКА ИНТЕРФЕЙСА (ЧЕРНЫЙ ФОН)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 20, 20, 20)
             setBackgroundColor(Color.BLACK)
         }
 
-        // 1. ВЕРХНЯЯ ПАНЕЛЬ СТАТУСА И НАСТРОЕК
+        // 1. ВЕРХНЯЯ ПАНЕЛЬ
         val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -97,7 +82,7 @@ class MainActivity : AppCompatActivity() {
         topPanel.addView(btnSettings)
         root.addView(topPanel)
 
-        // 2. КНОПКА СТАРТА СКАНИРОВАНИЯ
+        // 2. КНОПКА СТАРТА
         btnStart = Button(this).apply {
             text = "НАЧАТЬ СКАНИРОВАНИЕ"
             textSize = 16f
@@ -105,7 +90,7 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(btnStart)
 
-        // 3. ТАБЛИЦА ВКЛЮЧЕНИЙ ЗБН С ГОРИЗОНТАЛЬНОЙ/ВЕРТИКАЛЬНОЙ ПРОКРУТКОЙ
+        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ
         val scrollTable = HorizontalScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
@@ -167,7 +152,7 @@ class MainActivity : AppCompatActivity() {
         actionPanel.addView(btnExportExcel)
         root.addView(actionPanel)
 
-        // 6. ОКНО ЛОГОВ/КОНСОЛИ
+        // 6. ОКНО КОНСОЛИ
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 220
@@ -188,74 +173,60 @@ class MainActivity : AppCompatActivity() {
         renderTableHeader()
     }
 
-    override fun onResume() {
-        super.onResume()
-        val filter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED)
-        registerReceiver(usbReceiver, filter)
-    }
+    // Проверка и запрос разрешений на доступ к памяти устройства
+    private fun checkAndRequestStoragePermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Для Android 11+ (API 30+)
+            if (!Environment.isExternalStorageManager()) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivity(intent)
+                }
+            }
+        } else {
+            // Для Android 10 и ниже
+            val permissions = mutableListOf<String>()
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            if (permissions.isNotEmpty()) {
+                requestPermissions(permissions.toTypedArray(), 102)
+            }
+        }
 
-    override fun onPause() {
-        super.onPause()
-        try { unregisterReceiver(usbReceiver) } catch (_: Exception) {}
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
     }
 
     private fun log(message: String) {
         runOnUiThread { tvLog.append("$message\n") }
     }
 
-    private fun updateStatus(text: String) {
-        runOnUiThread { tvStatus.text = text }
-    }
-
-    private fun setKeepScreenOn(enabled: Boolean) {
-        runOnUiThread {
-            if (enabled) {
-                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            } else {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-        }
-    }
-
-    // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ СОЗДАНИЯ/ПОЛУЧЕНИЯ ПАПКИ БОРТА
+    // Вспомогательная функция для автоматического создания/получения папки борта
     private fun getAircraftFolder(tailNum: String): File {
         val safeTail = tailNum.trim().replace(Regex("[^a-zA-Z0-9_А-Яа-я-]"), "_").ifEmpty { "Неизвестный_Борт" }
-        val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-        val aircraftFolder = File(downloadsDir, "Борт_$safeTail")
+        
+        // Папка ZBNreader прямо в корне внутренней памяти устройства
+        val rootDir = Environment.getExternalStorageDirectory()
+        val mainFolder = File(rootDir, "ZBNreader")
+        val aircraftFolder = File(mainFolder, "Борт_$safeTail")
+
         if (!aircraftFolder.exists()) {
             aircraftFolder.mkdirs()
             log("Создана новая папка борта: ${aircraftFolder.name}")
         }
         return aircraftFolder
-    }
-
-    // ОЧИСТКА ВХОДНОГО БУФЕРА ОТ «МУСОРА» И ПОМЕХ
-    private fun purgeInputBuffer(port: UsbSerialPort) {
-        val dummy = ByteArray(512)
-        try {
-            while (port.read(dummy, 50) > 0) { /* Вычитываем остаточные байты */ }
-        } catch (_: Exception) {}
-    }
-
-    // РУКОПОЖАТИЕ С 3 ПОПЫТКАМИ ПЕРЕДАЧИ ENQ -> ACK
-    private fun performHandshake(port: UsbSerialPort): Boolean {
-        val ackBuf = ByteArray(1)
-        for (attempt in 1..3) {
-            purgeInputBuffer(port)
-            log("Отправка ENQ (0x05), попытка $attempt из 3...")
-            try {
-                port.write(byteArrayOf(0x05), 500)
-                val readCount = port.read(ackBuf, 500)
-                if (readCount > 0 && ackBuf[0] == 0x06.toByte()) {
-                    log("УСПЕХ: Получен ответ ACK (0x06) с попытки $attempt!")
-                    return true
-                }
-            } catch (e: Exception) {
-                log("Предупреждение при рукопожатии: ${e.message}")
-            }
-            Thread.sleep(150)
-        }
-        return false
     }
 
     private fun renderTableHeader() {
@@ -323,15 +294,14 @@ class MainActivity : AppCompatActivity() {
         selectedRow = row
         selectedRow?.setBackgroundColor(Color.parseColor("#263238"))
         selectedRecord = record
+
         btnCopySelected.isEnabled = true
         tvStatus.text = "Выбрано включение №${record.number}"
         log("Выбрана строка: Включение №${record.number}, Борт: ${record.tailNum}, Рейс: ${record.flightNum}")
     }
 
-    // 1. НАЧАЛО СКАНИРОВАНИЯ ОГЛАВЛЕНИЯ
     private fun startReading() {
         btnStart.isEnabled = false
-        setKeepScreenOn(true)
         progressBar.isIndeterminate = false
         progressBar.max = 100
         progressBar.progress = 0
@@ -341,7 +311,6 @@ class MainActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
         val currentBaudRate = prefs.getInt("baud_rate", 115200)
-
         val sessionLimit = try {
             prefs.getInt("limit", 10)
         } catch (_: Exception) {
@@ -355,6 +324,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+
             if (drivers.isEmpty()) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен!")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
@@ -375,19 +345,26 @@ class MainActivity : AppCompatActivity() {
             try {
                 port.open(connection)
                 port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                port.dtr = true
-                port.rts = true
+                port.dtr = false
+                port.rts = false
 
                 log("Порт открыт: $currentBaudRate 8N1")
+                log("Отправка ENQ (0x05)...")
+                port.write(byteArrayOf(0x05), 1000)
 
-                if (!performHandshake(port)) {
-                    log("Ошибка: Ответ ACK (0x06) не получен после 3 попыток.")
+                val ackBuf = ByteArray(1)
+                val readAck = port.read(ackBuf, 1000)
+
+                if (readAck == 0 || ackBuf[0] != 0x06.toByte()) {
+                    log("Ошибка: Ответ от ЗБН не получен (ожидался ACK 0x06)")
                     updateStatus("Статус: Сбой рукопожатия")
                     resetUi()
                     return@launch
                 }
 
+                log("Получен ответ ACK (0x06)!")
                 log("Запрос оглавления...")
+
                 val records = readCatalog(port, sessionLimit)
                 runOnUiThread {
                     flightList.clear()
@@ -402,6 +379,7 @@ class MainActivity : AppCompatActivity() {
                     log("Успешно загружено включений: ${records.size}")
                     updateStatus("Статус: Загружено ${records.size} включений")
                 }
+
             } catch (e: Exception) {
                 log("Ошибка: ${e.message}")
                 updateStatus("Статус: Сбой передачи")
@@ -416,6 +394,7 @@ class MainActivity : AppCompatActivity() {
         val flights = mutableListOf<FlightRecord>()
         log("Отправка команды 'M' (0x4D)...")
         port.write(byteArrayOf(0x4D.toByte()), 1000)
+
         val buffer = ByteArray(512)
         var noDataCounter = 0
 
@@ -425,10 +404,12 @@ class MainActivity : AppCompatActivity() {
                 noDataCounter = 0
                 val parsedRecords = tocParser.parseBuffer(buffer, count)
                 flights.addAll(parsedRecords)
+
                 log("Принято байт: $count | Считано включений: ${flights.size} / $limit")
 
                 val currentCount = flights.size.coerceAtMost(limit)
                 val percent = ((currentCount * 100) / limit).coerceAtMost(100)
+
                 runOnUiThread {
                     progressBar.progress = percent
                     tvStatus.text = "Статус: Поиск включений ($currentCount из $limit)... $percent%"
@@ -439,13 +420,12 @@ class MainActivity : AppCompatActivity() {
                 noDataCounter++
             }
         }
+
         return flights.take(limit)
     }
 
-    // 2. СКАЧИВАНИЕ ВЫБРАННОГО В КАТАЛОГЕ ВКЛЮЧЕНИЯ
     private fun copySelectedFlight() {
         val record = selectedRecord ?: return
-
         val currentIndex = flightList.indexOf(record)
         val startOffset = record.sizeBytes
 
@@ -456,7 +436,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnCopySelected.isEnabled = false
-        setKeepScreenOn(true)
         progressBar.visibility = View.VISIBLE
 
         if (bytesToRead != null && bytesToRead > 0) {
@@ -472,6 +451,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+
             if (drivers.isEmpty()) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен!")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
@@ -497,15 +477,10 @@ class MainActivity : AppCompatActivity() {
 
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                port.dtr = true
-                port.rts = true
+                port.write(byteArrayOf(0x05), 1000)
 
-                if (!performHandshake(port)) {
-                    log("Ошибка рукопожатия при скачивании файла.")
-                    updateStatus("Статус: Сбой рукопожатия")
-                    resetUi()
-                    return@launch
-                }
+                val ack = ByteArray(1)
+                port.read(ack, 1000)
 
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
 
@@ -519,6 +494,7 @@ class MainActivity : AppCompatActivity() {
 
                 val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
                 
+                // СОХРАНЕНИЕ В ПАПКУ БОРТА
                 val aircraftFolder = getAircraftFolder(record.tailNum)
                 outputFile = File(aircraftFolder, fileName)
                 val fos = FileOutputStream(outputFile)
@@ -532,7 +508,6 @@ class MainActivity : AppCompatActivity() {
                     val count = port.read(buffer, 1000)
                     if (count > 0) {
                         noDataCounter = 0
-
                         if (skippedBytes < startOffset) {
                             val neededToSkip = startOffset - skippedBytes
                             if (count <= neededToSkip) {
@@ -548,6 +523,7 @@ class MainActivity : AppCompatActivity() {
                                 } else {
                                     validLength
                                 }
+
                                 fos.write(buffer, validDataStart, bytesToWrite)
                                 writtenBytes += bytesToWrite
                             }
@@ -557,6 +533,7 @@ class MainActivity : AppCompatActivity() {
                             } else {
                                 count
                             }
+
                             fos.write(buffer, 0, bytesToWrite)
                             writtenBytes += bytesToWrite
                         }
@@ -596,7 +573,7 @@ class MainActivity : AppCompatActivity() {
                     val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
                     saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
-                    log("УСПЕХ! Включение №${record.number} сохранено в папку 'Борт_${record.tailNum}'")
+                    log("УСПЕХ! Включение №${record.number} сохранено в 'ZBNreader/Борт_${record.tailNum}'")
                     updateStatus("Статус: Сохранен рейс №${record.flightNum}")
                 }
 
@@ -611,10 +588,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 3. СКАЧИВАНИЕ ВСЕГО ДАМПА ПАМЯТИ ЗБН
     private fun executeFullDumpCommand() {
         btnStart.isEnabled = false
-        setKeepScreenOn(true)
         progressBar.isIndeterminate = true
         progressBar.visibility = View.VISIBLE
         tvStatus.text = "Статус: Чтение всего ЗБН..."
@@ -622,6 +597,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+
             if (drivers.isEmpty()) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен!")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
@@ -639,16 +615,12 @@ class MainActivity : AppCompatActivity() {
             }
 
             val port = driver.ports[0]
-
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
                 val baud = prefs.getInt("baud_rate", 115200)
 
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                port.dtr = true
-                port.rts = true
-
                 downloadFullDump(port)
             } catch (e: Exception) {
                 log("Ошибка считывания ЗБН: ${e.message}")
@@ -661,12 +633,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadFullDump(port: UsbSerialPort) {
-        if (!performHandshake(port)) {
-            log("Ошибка рукопожатия перед скачиванием дампа.")
-            updateStatus("Статус: Сбой рукопожатия")
-            return
-        }
-
         log("Отправка команды 'M' (0x4D)...")
         port.write(byteArrayOf(0x4D.toByte()), 1000)
 
@@ -690,7 +656,6 @@ class MainActivity : AppCompatActivity() {
                     fos.write(buffer, 0, count)
                     totalBytes += count
                     noDataCounter = 0
-
                     val currentTotal = totalBytes
                     runOnUiThread {
                         tvStatus.text = "Статус: Чтение всего ЗБН... ($currentTotal Б)"
@@ -732,7 +697,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 4. ЭКСПОРТ ТАБЛИЦЫ В EXCEL (.XLSX) В ПАПКУ БОРТА
     private fun exportToExcel() {
         if (flightList.isEmpty()) {
             log("Ошибка: Таблица пуста!")
@@ -782,7 +746,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 workbook.close()
 
-                log("УСПЕХ! Excel сохранен в папку '${aircraftFolder.name}': $fileName")
+                log("УСПЕХ! Excel сохранен в папку 'ZBNreader/${aircraftFolder.name}': $fileName")
                 updateStatus("Статус: Excel сохранен ($fileName)")
 
             } catch (e: Exception) {
@@ -800,7 +764,6 @@ class MainActivity : AppCompatActivity() {
         regSpeed: String
     ) {
         val metaFile = File(folder, "$binFileName.meta")
-
         val metaContent = """
             ========================================
             МЕТАДАННЫЕ ПОЛЁТНОЙ ИНФОРМАЦИИ
@@ -817,12 +780,15 @@ class MainActivity : AppCompatActivity() {
         """.trimIndent()
 
         metaFile.writeText(metaContent)
-        log("Метаданные сохранены в '${folder.name}/${metaFile.name}'")
+        log("Метаданные сохранены в 'ZBNreader/${folder.name}/${metaFile.name}'")
+    }
+
+    private fun updateStatus(text: String) {
+        runOnUiThread { tvStatus.text = text }
     }
 
     private fun resetUi() {
         runOnUiThread {
-            setKeepScreenOn(false)
             btnStart.isEnabled = true
             btnCopySelected.isEnabled = selectedRecord != null
             btnExportExcel.isEnabled = flightList.isNotEmpty()
