@@ -112,6 +112,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Сохранить настройки" />
+        
+        <Button
+    android:id="@+id/btnShareLog"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="Отправить лог ошибок" />
+        
 
     </LinearLayout>
 </ScrollView>
