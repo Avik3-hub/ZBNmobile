@@ -541,10 +541,22 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-            if (drivers.isEmpty()) return@launch
+            if (drivers.isEmpty()) {
+                log("Ошибка: USB-RS422 конвертер не обнаружен!")
+                updateStatus("Статус: Ошибка (Нет адаптера)")
+                resetUi()
+                return@launch
+            }
 
             val driver = drivers[0]
-            val connection = usbManager.openDevice(driver.device) ?: return@launch
+            val connection = usbManager.openDevice(driver.device)
+            if (connection == null) {
+                log("Ошибка: Нет разрешения на использование USB!")
+                updateStatus("Статус: Ошибка доступа к USB")
+                resetUi()
+                return@launch
+            }
+
             val port = driver.ports[0]
 
             try {
@@ -572,49 +584,63 @@ class MainActivity : AppCompatActivity() {
         val fileName = "ZBN_DUMP_$timeStamp"
         val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
         val outputFile = File(downloadsDir, fileName)
-        val fos = FileOutputStream(outputFile)
+        var fos: FileOutputStream? = null
 
-        val buffer = ByteArray(512)
-        var totalBytes = 0
-        var noDataCounter = 0
+        try {
+            fos = FileOutputStream(outputFile)
+            val buffer = ByteArray(512)
+            var totalBytes = 0
+            var noDataCounter = 0
 
-        while (true) {
-            val count = port.read(buffer, 1000)
-            if (count > 0) {
-                fos.write(buffer, 0, count)
-                totalBytes += count
-                noDataCounter = 0
-                log("Принято: $totalBytes байт")
+            while (true) {
+                val count = port.read(buffer, 1000)
+                if (count > 0) {
+                    fos.write(buffer, 0, count)
+                    totalBytes += count
+                    noDataCounter = 0
 
-                val currentTotal = totalBytes
-                runOnUiThread {
-                    tvStatus.text = "Статус: Чтение полного дампа... ($currentTotal Б)"
-                }
-            } else {
-                noDataCounter++
-                if (noDataCounter >= 3) {
-                    log("Прием завершен.")
-                    break
+                    val currentTotal = totalBytes
+                    runOnUiThread {
+                        tvStatus.text = "Статус: Чтение полного дампа... ($currentTotal Б)"
+                    }
+                } else {
+                    noDataCounter++
+                    if (noDataCounter >= 3) break
                 }
             }
+
+            fos.flush()
+            fos.close()
+
+            if (totalBytes == 0) {
+                log("ОШИБКА: Данные не получены!")
+                updateStatus("Статус: Ошибка (Нет данных от ЗБН)")
+                if (outputFile.exists()) outputFile.delete()
+                return
+            }
+
+            val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+            val sysTypes = resources.getStringArray(R.array.system_types)
+            val arincTypes = resources.getStringArray(R.array.arinc_types)
+            val regSpeeds = resources.getStringArray(R.array.reg_speeds)
+
+            val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
+            val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
+            val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
+
+            saveFlightMetadata(fileName, sysType, arinc, regSpeed)
+            log("УСПЕХ! Полный дамп сохранен: $fileName ($totalBytes Б)")
+            updateStatus("Статус: Дамп сохранен ($totalBytes Б)")
+
+        } catch (e: Exception) {
+            log("Ошибка при чтении дампа: ${e.message}")
+            updateStatus("Статус: Ошибка записи/чтения дампа")
+            try { fos?.close() } catch (_: Exception) {}
+            if (outputFile.exists()) {
+                outputFile.delete()
+                log("Удален неполный файл дампа.")
+            }
         }
-
-        fos.flush()
-        fos.close()
-
-        val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-        val sysTypes = resources.getStringArray(R.array.system_types)
-        val arincTypes = resources.getStringArray(R.array.arinc_types)
-        val regSpeeds = resources.getStringArray(R.array.reg_speeds)
-
-        val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
-        val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
-        val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
-
-        log("Применение схемы кадра: $sysType | ARINC-$arinc | $regSpeed поз./с")
-        saveFlightMetadata(fileName, sysType, arinc, regSpeed)
-        log("УСПЕХ! Файл сохранен: $fileName")
-        updateStatus("Статус: Готово ($totalBytes Б)")
     }
 
     private fun saveFlightMetadata(
