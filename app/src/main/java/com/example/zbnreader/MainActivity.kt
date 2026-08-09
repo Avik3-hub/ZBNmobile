@@ -58,8 +58,8 @@ class MainActivity : AppCompatActivity() {
     private val flightList = mutableListOf<FlightRecord>()
     private var selectedRecord: FlightRecord? = null
     private var selectedRow: TableRow? = null
-    private val tocParser = ZbnTocParser()
 
+    private val tocParser = ZbnTocParser()
     private val downloadedRecordNumbers = mutableSetOf<Int>()
     private val errorRecordNumbers = mutableSetOf<Int>()
 
@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(COLOR_BG)
         }
 
-        // 1. ВЕРХНЯЯ ПАНЕЛЬ
+        // 1. ВЕРХНЯЯ ПАНЕЛЬ (Исправлено отображение текста статуса)
         val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -81,10 +81,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         tvStatus = TextView(this).apply {
-            text = "Статус: Подключите ЗБН и нажмите Начать"
-            textSize = 13f
+            text = "Статус: Подключите ЗБН и нажмите «Начать сканирование»"
+            textSize = 12f
             setTextColor(COLOR_TEXT_MUTED)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            maxLines = 2
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins(0, 0, 12, 0)
+            }
         }
 
         val btnSettings = Button(this).apply {
@@ -139,6 +142,7 @@ class MainActivity : AppCompatActivity() {
         tableLayout = TableLayout(this).apply {
             isStretchAllColumns = false
         }
+
         verticalScroll.addView(tableLayout)
         scrollTable.addView(verticalScroll)
         tableCard.addView(scrollTable)
@@ -230,7 +234,6 @@ class MainActivity : AppCompatActivity() {
             button.background = createRoundedDrawable(activeBg, radiusDp)
             button.setTextColor(activeText)
         } else {
-            // Делаем неактивную кнопку бледной
             button.background = createRoundedDrawable(COLOR_DISABLED_BG, radiusDp, COLOR_BORDER, 1)
             button.setTextColor(COLOR_TEXT_MUTED)
         }
@@ -308,7 +311,6 @@ class MainActivity : AppCompatActivity() {
         val rootDir = Environment.getExternalStorageDirectory()
         val mainFolder = File(rootDir, "ZBNreader")
         val aircraftFolder = File(mainFolder, "Борт_$safeTail")
-
         if (!aircraftFolder.exists()) {
             aircraftFolder.mkdirs()
         }
@@ -337,7 +339,6 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(COLOR_SURFACE_CONTAINER)
             setPadding(6, 10, 6, 10)
         }
-
         val columns = arrayOf(" № ", " Адрес/Размер ", " Дата ", " Время ", " Начало ", " Конец ", " Рейс ", " Борт ")
         for (col in columns) {
             val tv = TextView(this).apply {
@@ -409,11 +410,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-
         selectedRow = row
         selectedRow?.setBackgroundColor(COLOR_SURFACE_CONTAINER)
         selectedRecord = record
-
         setCustomButtonState(btnCopySelected, true, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         tvStatus.text = "Выбрано включение №${record.number}"
         log("Выбрана строка: Включение №${record.number}, Борт: ${record.tailNum}, Рейс: ${record.flightNum}")
@@ -440,7 +439,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-
             if (drivers.isEmpty()) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен!")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
@@ -487,7 +485,6 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     updateStatus("Статус: Загружено ${records.size} включений")
                 }
-
             } catch (e: Exception) {
                 log("Ошибка: ${e.message}")
                 updateStatus("Статус: Сбой передачи")
@@ -501,7 +498,6 @@ class MainActivity : AppCompatActivity() {
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
         val flights = mutableListOf<FlightRecord>()
         port.write(byteArrayOf(0x4D.toByte()), 1000)
-
         val buffer = ByteArray(512)
         var noDataCounter = 0
 
@@ -511,21 +507,17 @@ class MainActivity : AppCompatActivity() {
                 noDataCounter = 0
                 val parsedRecords = tocParser.parseBuffer(buffer, count)
                 flights.addAll(parsedRecords)
-
                 val currentCount = flights.size.coerceAtMost(limit)
                 val percent = ((currentCount * 100) / limit).coerceAtMost(100)
-
                 runOnUiThread {
                     progressBar.progress = percent
                     tvStatus.text = "Статус: Поиск включений ($currentCount из $limit)... $percent%"
                 }
-
                 if (flights.size >= limit) break
             } else {
                 noDataCounter++
             }
         }
-
         return flights.take(limit)
     }
 
@@ -556,7 +548,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-
             if (drivers.isEmpty()) {
                 errorRecordNumbers.add(record.number)
                 runOnUiThread { updateTableUI(flightList) }
@@ -583,9 +574,9 @@ class MainActivity : AppCompatActivity() {
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                 port.write(byteArrayOf(0x05), 1000)
-
                 val ack = ByteArray(1)
                 port.read(ack, 1000)
+
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
 
                 val dateFormatted = try {
@@ -599,8 +590,8 @@ class MainActivity : AppCompatActivity() {
                 val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
                 val aircraftFolder = getAircraftFolder(record.tailNum)
                 outputFile = File(aircraftFolder, fileName)
-                val fos = FileOutputStream(outputFile)
 
+                val fos = FileOutputStream(outputFile)
                 val buffer = ByteArray(512)
                 var skippedBytes = 0L
                 var writtenBytes = 0L
@@ -625,7 +616,6 @@ class MainActivity : AppCompatActivity() {
                                 } else {
                                     validLength
                                 }
-
                                 fos.write(buffer, validDataStart, bytesToWrite)
                                 writtenBytes += bytesToWrite
                             }
@@ -635,7 +625,6 @@ class MainActivity : AppCompatActivity() {
                             } else {
                                 count
                             }
-
                             fos.write(buffer, 0, bytesToWrite)
                             writtenBytes += bytesToWrite
                         }
@@ -675,13 +664,12 @@ class MainActivity : AppCompatActivity() {
                     val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
                     saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
+
                     downloadedRecordNumbers.add(record.number)
                     errorRecordNumbers.remove(record.number)
                     updateStatus("Статус: Сохранен рейс №${record.flightNum}")
                 }
-
                 runOnUiThread { updateTableUI(flightList) }
-
             } catch (_: Exception) {
                 errorRecordNumbers.add(record.number)
                 updateStatus("Статус: Ошибка сбоя связи")
@@ -704,7 +692,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-
             if (drivers.isEmpty()) {
                 updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
@@ -738,10 +725,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun downloadFullDump(port: UsbSerialPort) {
         port.write(byteArrayOf(0x4D.toByte()), 1000)
-
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val fileName = "ZBN_DUMP_$timeStamp"
-        
+
         val tailNum = flightList.firstOrNull { it.tailNum.isNotBlank() }?.tailNum ?: "Дамп"
         val aircraftFolder = getAircraftFolder(tailNum)
         val outputFile = File(aircraftFolder, fileName)
@@ -789,7 +775,6 @@ class MainActivity : AppCompatActivity() {
 
             saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
             updateStatus("Статус: Весь ЗБН сохранен ($totalBytes Б)")
-
         } catch (_: Exception) {
             updateStatus("Статус: Ошибка записи/чтения ЗБН")
             try { fos?.close() } catch (_: Exception) {}
@@ -807,9 +792,9 @@ class MainActivity : AppCompatActivity() {
             try {
                 val workbook = XSSFWorkbook()
                 val sheet = workbook.createSheet("Лист1")
-
                 val headerRow = sheet.createRow(0)
                 val headers = arrayOf("№", "Размер", "Дата", "ВремяЗап", "Начало", "Конец", "Рейс", "Борт", "Сбоев")
+
                 for ((index, header) in headers.withIndex()) {
                     headerRow.createCell(index).setCellValue(header)
                 }
@@ -822,19 +807,17 @@ class MainActivity : AppCompatActivity() {
                     row.createCell(3).setCellValue(record.duration)
                     row.createCell(4).setCellValue(record.startTime)
                     row.createCell(5).setCellValue(record.endTime)
-                    
-                    record.flightNum.toDoubleOrNull()?.let { row.createCell(6).setCellValue(it) } 
-                        ?: row.createCell(6).setCellValue(record.flightNum)
-                        
-                    record.tailNum.toDoubleOrNull()?.let { row.createCell(7).setCellValue(it) } 
-                        ?: row.createCell(7).setCellValue(record.tailNum)
 
+                    record.flightNum.toDoubleOrNull()?.let { row.createCell(6).setCellValue(it) }
+                        ?: row.createCell(6).setCellValue(record.flightNum)
+
+                    record.tailNum.toDoubleOrNull()?.let { row.createCell(7).setCellValue(it) }
+                        ?: row.createCell(7).setCellValue(record.tailNum)
                     row.createCell(8).setCellValue("")
                 }
 
                 val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
                 val fileName = "Список_включений_$timeStamp.xlsx"
-
                 val tailNum = flightList.firstOrNull { it.tailNum.isNotBlank() }?.tailNum ?: "Общий"
                 val aircraftFolder = getAircraftFolder(tailNum)
                 val outputFile = File(aircraftFolder, fileName)
@@ -843,9 +826,7 @@ class MainActivity : AppCompatActivity() {
                     workbook.write(fos)
                 }
                 workbook.close()
-
                 updateStatus("Статус: Excel сохранен ($fileName)")
-
             } catch (e: Exception) {
                 updateStatus("Статус: Ошибка создания Excel")
             }
