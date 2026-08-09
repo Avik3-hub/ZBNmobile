@@ -1,7 +1,9 @@
 package com.example.zbnreader
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -11,6 +13,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -41,6 +44,17 @@ class MainActivity : AppCompatActivity() {
     private var selectedRow: TableRow? = null
     private val tocParser = ZbnTocParser()
 
+    // СЛУШАТЕЛЬ ФИЗИЧЕСКОГО ОТКЛЮЧЕНИЯ USB-КАБЕЛЯ
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (UsbManager.ACTION_USB_DEVICE_DETACHED == intent?.action) {
+                log("КРИТИЧЕСКАЯ ОШИБКА: USB-адаптер отключен!")
+                updateStatus("Статус: Кабель отключен!")
+                resetUi()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -50,13 +64,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // РАЗМЕТКА ИНТЕРФЕЙСА (ЧЕРНЫЙ ФОН)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 20, 20, 20)
             setBackgroundColor(Color.BLACK)
         }
 
-        // 1. ВЕРХНЯЯ ПАНЕЛЬ
+        // 1. ВЕРХНЯЯ ПАНЕЛЬ СТАТУСА И НАСТРОЕК
         val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -82,7 +97,7 @@ class MainActivity : AppCompatActivity() {
         topPanel.addView(btnSettings)
         root.addView(topPanel)
 
-        // 2. КНОПКА СТАРТА
+        // 2. КНОПКА СТАРТА СКАНИРОВАНИЯ
         btnStart = Button(this).apply {
             text = "НАЧАТЬ СКАНИРОВАНИЕ"
             textSize = 16f
@@ -90,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(btnStart)
 
-        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ
+        // 3. ТАБЛИЦА ВКЛЮЧЕНИЙ ЗБН С ГОРИЗОНТАЛЬНОЙ/ВЕРТИКАЛЬНОЙ ПРОКРУТКОЙ
         val scrollTable = HorizontalScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
@@ -152,7 +167,7 @@ class MainActivity : AppCompatActivity() {
         actionPanel.addView(btnExportExcel)
         root.addView(actionPanel)
 
-        // 6. ОКНО КОНСОЛИ
+        // 6. ОКНО ЛОГОВ/КОНСОЛИ
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 220
@@ -173,11 +188,36 @@ class MainActivity : AppCompatActivity() {
         renderTableHeader()
     }
 
+    override fun onResume() {
+        super.onResume()
+        val filter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        registerReceiver(usbReceiver, filter)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try { unregisterReceiver(usbReceiver) } catch (_: Exception) {}
+    }
+
     private fun log(message: String) {
         runOnUiThread { tvLog.append("$message\n") }
     }
 
-    // Вспомогательная функция для автоматического создания/получения папки борта
+    private fun updateStatus(text: String) {
+        runOnUiThread { tvStatus.text = text }
+    }
+
+    private fun setKeepScreenOn(enabled: Boolean) {
+        runOnUiThread {
+            if (enabled) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+    }
+
+    // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ СОЗДАНИЯ/ПОЛУЧЕНИЯ ПАПКИ БОРТА
     private fun getAircraftFolder(tailNum: String): File {
         val safeTail = tailNum.trim().replace(Regex("[^a-zA-Z0-9_А-Яа-я-]"), "_").ifEmpty { "Неизвестный_Борт" }
         val downloadsDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
@@ -187,6 +227,35 @@ class MainActivity : AppCompatActivity() {
             log("Создана новая папка борта: ${aircraftFolder.name}")
         }
         return aircraftFolder
+    }
+
+    // ОЧИСТКА ВХОДНОГО БУФЕРА ОТ «МУСОРА» И ПОМЕХ
+    private fun purgeInputBuffer(port: UsbSerialPort) {
+        val dummy = ByteArray(512)
+        try {
+            while (port.read(dummy, 50) > 0) { /* Вычитываем остаточные байты */ }
+        } catch (_: Exception) {}
+    }
+
+    // РУКОПОЖАТИЕ С 3 ПОПЫТКАМИ ПЕРЕДАЧИ ENQ -> ACK
+    private fun performHandshake(port: UsbSerialPort): Boolean {
+        val ackBuf = ByteArray(1)
+        for (attempt in 1..3) {
+            purgeInputBuffer(port)
+            log("Отправка ENQ (0x05), попытка $attempt из 3...")
+            try {
+                port.write(byteArrayOf(0x05), 500)
+                val readCount = port.read(ackBuf, 500)
+                if (readCount > 0 && ackBuf[0] == 0x06.toByte()) {
+                    log("УСПЕХ: Получен ответ ACK (0x06) с попытки $attempt!")
+                    return true
+                }
+            } catch (e: Exception) {
+                log("Предупреждение при рукопожатии: ${e.message}")
+            }
+            Thread.sleep(150)
+        }
+        return false
     }
 
     private fun renderTableHeader() {
@@ -259,8 +328,10 @@ class MainActivity : AppCompatActivity() {
         log("Выбрана строка: Включение №${record.number}, Борт: ${record.tailNum}, Рейс: ${record.flightNum}")
     }
 
+    // 1. НАЧАЛО СКАНИРОВАНИЯ ОГЛАВЛЕНИЯ
     private fun startReading() {
         btnStart.isEnabled = false
+        setKeepScreenOn(true)
         progressBar.isIndeterminate = false
         progressBar.max = 100
         progressBar.progress = 0
@@ -304,25 +375,19 @@ class MainActivity : AppCompatActivity() {
             try {
                 port.open(connection)
                 port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                port.dtr = false
-                port.rts = false
+                port.dtr = true
+                port.rts = true
 
                 log("Порт открыт: $currentBaudRate 8N1")
-                log("Отправка ENQ (0x05)...")
-                port.write(byteArrayOf(0x05), 1000)
 
-                val ackBuf = ByteArray(1)
-                val readAck = port.read(ackBuf, 1000)
-                if (readAck == 0 || ackBuf[0] != 0x06.toByte()) {
-                    log("Ошибка: Ответ от ЗБН не получен (ожидался ACK 0x06)")
+                if (!performHandshake(port)) {
+                    log("Ошибка: Ответ ACK (0x06) не получен после 3 попыток.")
                     updateStatus("Статус: Сбой рукопожатия")
                     resetUi()
                     return@launch
                 }
 
-                log("Получен ответ ACK (0x06)!")
                 log("Запрос оглавления...")
-
                 val records = readCatalog(port, sessionLimit)
                 runOnUiThread {
                     flightList.clear()
@@ -377,6 +442,7 @@ class MainActivity : AppCompatActivity() {
         return flights.take(limit)
     }
 
+    // 2. СКАЧИВАНИЕ ВЫБРАННОГО В КАТАЛОГЕ ВКЛЮЧЕНИЯ
     private fun copySelectedFlight() {
         val record = selectedRecord ?: return
 
@@ -390,6 +456,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnCopySelected.isEnabled = false
+        setKeepScreenOn(true)
         progressBar.visibility = View.VISIBLE
 
         if (bytesToRead != null && bytesToRead > 0) {
@@ -430,10 +497,15 @@ class MainActivity : AppCompatActivity() {
 
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                port.dtr = true
+                port.rts = true
 
-                port.write(byteArrayOf(0x05), 1000)
-                val ack = ByteArray(1)
-                port.read(ack, 1000)
+                if (!performHandshake(port)) {
+                    log("Ошибка рукопожатия при скачивании файла.")
+                    updateStatus("Статус: Сбой рукопожатия")
+                    resetUi()
+                    return@launch
+                }
 
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
 
@@ -447,7 +519,6 @@ class MainActivity : AppCompatActivity() {
 
                 val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
                 
-                // СОХРАНЕНИЕ В ПАПКУ БОРТА
                 val aircraftFolder = getAircraftFolder(record.tailNum)
                 outputFile = File(aircraftFolder, fileName)
                 val fos = FileOutputStream(outputFile)
@@ -540,8 +611,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 3. СКАЧИВАНИЕ ВСЕГО ДАМПА ПАМЯТИ ЗБН
     private fun executeFullDumpCommand() {
         btnStart.isEnabled = false
+        setKeepScreenOn(true)
         progressBar.isIndeterminate = true
         progressBar.visibility = View.VISIBLE
         tvStatus.text = "Статус: Чтение всего ЗБН..."
@@ -573,6 +646,9 @@ class MainActivity : AppCompatActivity() {
 
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                port.dtr = true
+                port.rts = true
+
                 downloadFullDump(port)
             } catch (e: Exception) {
                 log("Ошибка считывания ЗБН: ${e.message}")
@@ -585,13 +661,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadFullDump(port: UsbSerialPort) {
+        if (!performHandshake(port)) {
+            log("Ошибка рукопожатия перед скачиванием дампа.")
+            updateStatus("Статус: Сбой рукопожатия")
+            return
+        }
+
         log("Отправка команды 'M' (0x4D)...")
         port.write(byteArrayOf(0x4D.toByte()), 1000)
 
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val fileName = "ZBN_DUMP_$timeStamp"
         
-        // Определяем борт по считанному списку (если есть)
         val tailNum = flightList.firstOrNull { it.tailNum.isNotBlank() }?.tailNum ?: "Дамп"
         val aircraftFolder = getAircraftFolder(tailNum)
         val outputFile = File(aircraftFolder, fileName)
@@ -651,7 +732,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ЭКСПОРТ ТАБЛИЦЫ В EXCEL (.XLSX) В ПАПКУ БОРТА
+    // 4. ЭКСПОРТ ТАБЛИЦЫ В EXCEL (.XLSX) В ПАПКУ БОРТА
     private fun exportToExcel() {
         if (flightList.isEmpty()) {
             log("Ошибка: Таблица пуста!")
@@ -692,7 +773,6 @@ class MainActivity : AppCompatActivity() {
                 val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
                 val fileName = "Список_включений_$timeStamp.xlsx"
 
-                // Сохранение в папку первого борта из списка
                 val tailNum = flightList.firstOrNull { it.tailNum.isNotBlank() }?.tailNum ?: "Общий"
                 val aircraftFolder = getAircraftFolder(tailNum)
                 val outputFile = File(aircraftFolder, fileName)
@@ -740,12 +820,9 @@ class MainActivity : AppCompatActivity() {
         log("Метаданные сохранены в '${folder.name}/${metaFile.name}'")
     }
 
-    private fun updateStatus(text: String) {
-        runOnUiThread { tvStatus.text = text }
-    }
-
     private fun resetUi() {
         runOnUiThread {
+            setKeepScreenOn(false)
             btnStart.isEnabled = true
             btnCopySelected.isEnabled = selectedRecord != null
             btnExportExcel.isEnabled = flightList.isNotEmpty()
