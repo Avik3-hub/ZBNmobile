@@ -31,15 +31,16 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
-    // Цветовая палитра в стиле Google Gemini (Dark Theme) с добавлением статусных цветов
+    // Цветовая палитра в стиле Google Gemini (Dark Theme)
     private val COLOR_BG = Color.parseColor("#131314")
     private val COLOR_SURFACE = Color.parseColor("#1E1F20")
     private val COLOR_SURFACE_CONTAINER = Color.parseColor("#28292A")
     private val COLOR_ACCENT = Color.parseColor("#A8C7FA")
     private val COLOR_ACCENT_TEXT = Color.parseColor("#041E49")
     private val COLOR_TEXT = Color.parseColor("#E3E3E3")
-    private val COLOR_TEXT_MUTED = Color.parseColor("#C4C7C5")
+    private val COLOR_TEXT_MUTED = Color.parseColor("#757775") // Более приглушенный для неактивных элементов
     private val COLOR_BORDER = Color.parseColor("#444746")
+    private val COLOR_DISABLED_BG = Color.parseColor("#181819") // Бледно-темный фон для неактивных кнопок
 
     // Статусные цвета для строк таблицы
     private val COLOR_DOWNLOADED = Color.parseColor("#1A3852") // Нежно-голубой для скачанных
@@ -59,7 +60,6 @@ class MainActivity : AppCompatActivity() {
     private var selectedRow: TableRow? = null
     private val tocParser = ZbnTocParser()
 
-    // Наборы для отслеживания статусов скачивания в текущей сессии
     private val downloadedRecordNumbers = mutableSetOf<Int>()
     private val errorRecordNumbers = mutableSetOf<Int>()
 
@@ -106,11 +106,11 @@ class MainActivity : AppCompatActivity() {
             text = "НАЧАТЬ СКАНИРОВАНИЕ"
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(COLOR_ACCENT_TEXT)
-            background = createRoundedDrawable(COLOR_ACCENT, 24f)
             setPadding(16, 26, 16, 26)
             setOnClickListener { startReading() }
         }
+        setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
+
         val startParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
@@ -167,31 +167,26 @@ class MainActivity : AppCompatActivity() {
         btnCopySelected = Button(this).apply {
             text = "Копировать"
             textSize = 12f
-            isEnabled = false
-            setTextColor(COLOR_TEXT)
-            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 16f)
-            layoutParams = btnParams
             setOnClickListener { copySelectedFlight() }
         }
+        btnCopySelected.layoutParams = btnParams
+        setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
 
         btnFullDump = Button(this).apply {
             text = "ВЕСЬ ЗБН"
             textSize = 12f
-            setTextColor(COLOR_TEXT)
-            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 16f)
-            layoutParams = btnParams
             setOnClickListener { executeFullDumpCommand() }
         }
+        btnFullDump.layoutParams = btnParams
+        setCustomButtonState(btnFullDump, true, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
 
         btnExportExcel = Button(this).apply {
             text = "В Excel"
             textSize = 12f
-            isEnabled = false
-            setTextColor(COLOR_TEXT)
-            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 16f)
-            layoutParams = btnParams
             setOnClickListener { exportToExcel() }
         }
+        btnExportExcel.layoutParams = btnParams
+        setCustomButtonState(btnExportExcel, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
 
         actionPanel.addView(btnCopySelected)
         actionPanel.addView(btnFullDump)
@@ -229,6 +224,18 @@ class MainActivity : AppCompatActivity() {
         renderTableHeader()
     }
 
+    private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
+        button.isEnabled = enabled
+        if (enabled) {
+            button.background = createRoundedDrawable(activeBg, radiusDp)
+            button.setTextColor(activeText)
+        } else {
+            // Делаем неактивную кнопку бледной
+            button.background = createRoundedDrawable(COLOR_DISABLED_BG, radiusDp, COLOR_BORDER, 1)
+            button.setTextColor(COLOR_TEXT_MUTED)
+        }
+    }
+
     private fun createRoundedDrawable(backgroundColor: Int, radiusDp: Float, strokeColor: Int = 0, strokeWidthPx: Int = 0): GradientDrawable {
         val radius = radiusDp * resources.displayMetrics.density
         return GradientDrawable().apply {
@@ -259,14 +266,9 @@ class MainActivity : AppCompatActivity() {
             val rootDir = Environment.getExternalStorageDirectory()
             val mainFolder = File(rootDir, "ZBNreader")
             if (!mainFolder.exists()) {
-                val created = mainFolder.mkdirs()
-                if (created) {
-                    log("Корневая папка 'ZBNreader' создана в памяти устройства")
-                }
+                mainFolder.mkdirs()
             }
-        } catch (e: Exception) {
-            log("Ошибка создания корневой папки: ${e.message}")
-        }
+        } catch (_: Exception) {}
     }
 
     private fun checkAndRequestStoragePermissions() {
@@ -277,9 +279,8 @@ class MainActivity : AppCompatActivity() {
                         data = Uri.parse("package:$packageName")
                     }
                     startActivity(intent)
-                } catch (e: Exception) {
-                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                    startActivity(intent)
+                } catch (_: Exception) {
+                    startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
                 }
             } else {
                 createMainDirectory()
@@ -289,31 +290,11 @@ class MainActivity : AppCompatActivity() {
             if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
-            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
             if (permissions.isNotEmpty()) {
                 requestPermissions(permissions.toTypedArray(), 102)
             } else {
                 createMainDirectory()
             }
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
-            }
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 102 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            createMainDirectory()
         }
     }
 
@@ -330,25 +311,22 @@ class MainActivity : AppCompatActivity() {
 
         if (!aircraftFolder.exists()) {
             aircraftFolder.mkdirs()
-            log("Создана папка борта: ${aircraftFolder.name}")
         }
         return aircraftFolder
     }
 
-    // Проверка, существует ли уже скачанный файл для конкретного рейса на диске
     private fun isFlightDownloaded(record: FlightRecord): Boolean {
         return try {
             val dateFormatted = try {
                 val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
                 val parsedDate = inputFormat.parse(record.date.trim())
                 SimpleDateFormat("yyyyMMdd", Locale.US).format(parsedDate ?: Date())
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
             }
             val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
-            val aircraftFolder = getAircraftFolder(record.tailNum)
-            File(aircraftFolder, fileName).exists()
-        } catch (e: Exception) {
+            File(getAircraftFolder(record.tailNum), fileName).exists()
+        } catch (_: Exception) {
             false
         }
     }
@@ -379,8 +357,8 @@ class MainActivity : AppCompatActivity() {
         renderTableHeader()
         selectedRecord = null
         selectedRow = null
-        btnCopySelected.isEnabled = false
-        btnExportExcel.isEnabled = records.isNotEmpty()
+        setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+        setCustomButtonState(btnExportExcel, records.isNotEmpty(), COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
 
         records.forEach { record ->
             val row = TableRow(this).apply {
@@ -388,7 +366,6 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { selectRow(this, record) }
             }
 
-            // Установка фонового цвета строки в зависимости от статуса (ошибка, скачано или обычно)
             when {
                 errorRecordNumbers.contains(record.number) -> row.setBackgroundColor(COLOR_ERROR)
                 isFlightDownloaded(record) || downloadedRecordNumbers.contains(record.number) -> row.setBackgroundColor(COLOR_DOWNLOADED)
@@ -421,7 +398,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun selectRow(row: TableRow, record: FlightRecord) {
-        // Возвращаем предыдущей выбранной строке её исходный статус (скачана / ошибка / обычная)
         selectedRow?.let { prevRow ->
             val prevIndex = tableLayout.indexOfChild(prevRow) - 1
             if (prevIndex >= 0 && prevIndex < flightList.size) {
@@ -438,13 +414,14 @@ class MainActivity : AppCompatActivity() {
         selectedRow?.setBackgroundColor(COLOR_SURFACE_CONTAINER)
         selectedRecord = record
 
-        btnCopySelected.isEnabled = true
+        setCustomButtonState(btnCopySelected, true, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         tvStatus.text = "Выбрано включение №${record.number}"
         log("Выбрана строка: Включение №${record.number}, Борт: ${record.tailNum}, Рейс: ${record.flightNum}")
     }
 
     private fun startReading() {
-        btnStart.isEnabled = false
+        setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
+        setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.isIndeterminate = false
         progressBar.max = 100
         progressBar.progress = 0
@@ -459,10 +436,6 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             prefs.getString("limit", "10")?.toIntOrNull() ?: 10
         }
-
-        log("Загружены настройки:")
-        log(" • Скорость (Baud Rate): $currentBaudRate")
-        log(" • Лимит включений: $sessionLimit")
 
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
@@ -491,10 +464,7 @@ class MainActivity : AppCompatActivity() {
                 port.dtr = false
                 port.rts = false
 
-                log("Порт открыт: $currentBaudRate 8N1")
-                log("Отправка ENQ (0x05)...")
                 port.write(byteArrayOf(0x05), 1000)
-
                 val ackBuf = ByteArray(1)
                 val readAck = port.read(ackBuf, 1000)
 
@@ -505,9 +475,6 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                log("Получен ответ ACK (0x06)!")
-                log("Запрос оглавления...")
-
                 val records = readCatalog(port, sessionLimit)
                 runOnUiThread {
                     flightList.clear()
@@ -516,10 +483,8 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (records.isEmpty()) {
-                    log("Включения не найдены.")
                     updateStatus("Статус: Оглавление пусто")
                 } else {
-                    log("Успешно загружено включений: ${records.size}")
                     updateStatus("Статус: Загружено ${records.size} включений")
                 }
 
@@ -535,7 +500,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
         val flights = mutableListOf<FlightRecord>()
-        log("Отправка команды 'M' (0x4D)...")
         port.write(byteArrayOf(0x4D.toByte()), 1000)
 
         val buffer = ByteArray(512)
@@ -547,8 +511,6 @@ class MainActivity : AppCompatActivity() {
                 noDataCounter = 0
                 val parsedRecords = tocParser.parseBuffer(buffer, count)
                 flights.addAll(parsedRecords)
-
-                log("Принято байт: $count | Считано включений: ${flights.size} / $limit")
 
                 val currentCount = flights.size.coerceAtMost(limit)
                 val percent = ((currentCount * 100) / limit).coerceAtMost(100)
@@ -578,7 +540,7 @@ class MainActivity : AppCompatActivity() {
             null
         }
 
-        btnCopySelected.isEnabled = false
+        setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.visibility = View.VISIBLE
 
         if (bytesToRead != null && bytesToRead > 0) {
@@ -596,8 +558,6 @@ class MainActivity : AppCompatActivity() {
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
 
             if (drivers.isEmpty()) {
-                log("Ошибка: USB-RS422 конвертер не обнаружен!")
-                updateStatus("Статус: Ошибка (Нет адаптера)")
                 errorRecordNumbers.add(record.number)
                 runOnUiThread { updateTableUI(flightList) }
                 resetUi()
@@ -607,8 +567,6 @@ class MainActivity : AppCompatActivity() {
             val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
-                log("Ошибка доступа к USB!")
-                updateStatus("Статус: Ошибка доступа к USB")
                 errorRecordNumbers.add(record.number)
                 runOnUiThread { updateTableUI(flightList) }
                 resetUi()
@@ -628,19 +586,17 @@ class MainActivity : AppCompatActivity() {
 
                 val ack = ByteArray(1)
                 port.read(ack, 1000)
-
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
 
                 val dateFormatted = try {
                     val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
                     val parsedDate = inputFormat.parse(record.date.trim())
                     SimpleDateFormat("yyyyMMdd", Locale.US).format(parsedDate ?: Date())
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
                 }
 
                 val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
-                
                 val aircraftFolder = getAircraftFolder(record.tailNum)
                 outputFile = File(aircraftFolder, fileName)
                 val fos = FileOutputStream(outputFile)
@@ -706,9 +662,8 @@ class MainActivity : AppCompatActivity() {
                 fos.close()
 
                 if (bytesToRead != null && writtenBytes < bytesToRead) {
-                    log("ОШИБКА: Скачивание прервано! Записано $writtenBytes из $bytesToRead Б")
-                    updateStatus("Статус: Ошибка (Передача прервана)")
                     errorRecordNumbers.add(record.number)
+                    updateStatus("Статус: Ошибка (Передача прервана)")
                     if (outputFile.exists()) outputFile.delete()
                 } else {
                     val sysTypes = resources.getStringArray(R.array.system_types)
@@ -720,21 +675,16 @@ class MainActivity : AppCompatActivity() {
                     val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
                     saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
-                    
-                    // Помечаем как успешно скачанное
                     downloadedRecordNumbers.add(record.number)
                     errorRecordNumbers.remove(record.number)
-
-                    log("УСПЕХ! Включение №${record.number} сохранено в 'ZBNreader/Борт_${record.tailNum}'")
                     updateStatus("Статус: Сохранен рейс №${record.flightNum}")
                 }
-                
+
                 runOnUiThread { updateTableUI(flightList) }
 
-            } catch (e: Exception) {
-                log("Ошибка при выгрузке полета: ${e.message}")
-                updateStatus("Статус: Ошибка сбоя связи")
+            } catch (_: Exception) {
                 errorRecordNumbers.add(record.number)
+                updateStatus("Статус: Ошибка сбоя связи")
                 outputFile?.let { if (it.exists()) it.delete() }
                 runOnUiThread { updateTableUI(flightList) }
             } finally {
@@ -745,7 +695,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun executeFullDumpCommand() {
-        btnStart.isEnabled = false
+        setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
+        setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.isIndeterminate = true
         progressBar.visibility = View.VISIBLE
         tvStatus.text = "Статус: Чтение всего ЗБН..."
@@ -755,7 +706,6 @@ class MainActivity : AppCompatActivity() {
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
 
             if (drivers.isEmpty()) {
-                log("Ошибка: USB-RS422 конвертер не обнаружен!")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
                 return@launch
@@ -764,7 +714,6 @@ class MainActivity : AppCompatActivity() {
             val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
-                log("Ошибка доступа к USB!")
                 updateStatus("Статус: Ошибка доступа к USB")
                 resetUi()
                 return@launch
@@ -779,7 +728,6 @@ class MainActivity : AppCompatActivity() {
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                 downloadFullDump(port)
             } catch (e: Exception) {
-                log("Ошибка считывания ЗБН: ${e.message}")
                 updateStatus("Статус: Ошибка скачивания ЗБН")
             } finally {
                 try { port.close() } catch (_: Exception) {}
@@ -789,7 +737,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadFullDump(port: UsbSerialPort) {
-        log("Отправка команды 'M' (0x4D)...")
         port.write(byteArrayOf(0x4D.toByte()), 1000)
 
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
@@ -826,7 +773,6 @@ class MainActivity : AppCompatActivity() {
             fos.close()
 
             if (totalBytes == 0) {
-                log("ОШИБКА: Данные не получены!")
                 updateStatus("Статус: Ошибка (Нет данных)")
                 if (outputFile.exists()) outputFile.delete()
                 return
@@ -842,11 +788,9 @@ class MainActivity : AppCompatActivity() {
             val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
             saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
-            log("УСПЕХ! Весь ЗБН сохранен в папку '${aircraftFolder.name}' ($totalBytes Б)")
             updateStatus("Статус: Весь ЗБН сохранен ($totalBytes Б)")
 
-        } catch (e: Exception) {
-            log("Ошибка при чтении ЗБН: ${e.message}")
+        } catch (_: Exception) {
             updateStatus("Статус: Ошибка записи/чтения ЗБН")
             try { fos?.close() } catch (_: Exception) {}
             if (outputFile.exists()) outputFile.delete()
@@ -855,7 +799,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun exportToExcel() {
         if (flightList.isEmpty()) {
-            log("Ошибка: Таблица пуста!")
             updateStatus("Статус: Таблица пуста")
             return
         }
@@ -868,8 +811,7 @@ class MainActivity : AppCompatActivity() {
                 val headerRow = sheet.createRow(0)
                 val headers = arrayOf("№", "Размер", "Дата", "ВремяЗап", "Начало", "Конец", "Рейс", "Борт", "Сбоев")
                 for ((index, header) in headers.withIndex()) {
-                    val cell = headerRow.createCell(index)
-                    cell.setCellValue(header)
+                    headerRow.createCell(index).setCellValue(header)
                 }
 
                 for ((rowIndex, record) in flightList.withIndex()) {
@@ -902,11 +844,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 workbook.close()
 
-                log("УСПЕХ! Excel сохранен в папку 'ZBNreader/${aircraftFolder.name}': $fileName")
                 updateStatus("Статус: Excel сохранен ($fileName)")
 
             } catch (e: Exception) {
-                log("Ошибка экспорта в Excel: ${e.message}")
                 updateStatus("Статус: Ошибка создания Excel")
             }
         }
@@ -934,9 +874,7 @@ class MainActivity : AppCompatActivity() {
             • Длина субкадра: $regSpeed слов
             ========================================
         """.trimIndent()
-
         metaFile.writeText(metaContent)
-        log("Метаданные сохранены в 'ZBNreader/${folder.name}/${metaFile.name}'")
     }
 
     private fun updateStatus(text: String) {
@@ -945,9 +883,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetUi() {
         runOnUiThread {
-            btnStart.isEnabled = true
-            btnCopySelected.isEnabled = selectedRecord != null
-            btnExportExcel.isEnabled = flightList.isNotEmpty()
+            setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
+            setCustomButtonState(btnFullDump, true, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+            setCustomButtonState(btnCopySelected, selectedRecord != null, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+            setCustomButtonState(btnExportExcel, flightList.isNotEmpty(), COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
             progressBar.visibility = View.GONE
             progressBar.isIndeterminate = false
             progressBar.progress = 0
