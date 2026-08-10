@@ -16,6 +16,7 @@ import com.hoho.android.usbserial.driver.UsbSerialProber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -95,15 +96,23 @@ class FlightDownloadService : Service() {
             port.open(connection)
             port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
 
-            // 1. Рукопожатие
+            // 1. Явный сброс сигналов управления для RS-422
+            port.dtr = false
+            port.rts = false
+
+            // 2. Рукопожатие с проверкой ответа ACK (0x06)
             port.write(byteArrayOf(0x05), 1000)
             val ack = ByteArray(1)
-            port.read(ack, 1000)
+            val ackRead = port.read(ack, 1000)
+            if (ackRead <= 0 || ack[0] != 0x06.toByte()) {
+                stopWithNotification("Ошибка связи: Накопитель не отвечает (ACK != 0x06)")
+                return
+            }
 
-            // 2. Старт потока
+            // 3. Старт непрерывного потока
             port.write(byteArrayOf(0x4D.toByte()), 1000)
 
-            // Имя файла по шаблону ггггммдд_номерВключения_НАГИБИН (без расширения)
+            // Формирование имени выходного файла
             val dateFormatted = try {
                 val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
                 val parsedDate = inputFormat.parse(recordDate.trim())
@@ -121,10 +130,12 @@ class FlightDownloadService : Service() {
             var skippedBytes = 0L
             var writtenBytes = 0L
             var noDataCounter = 0
+            var lastNotifTime = 0L
 
             updateNotification("Скачивание №$recordNum: 0 Б")
 
-            while (true) {
+            // 4. Цикл с контролем отмены и безопасной частотой обновлений UI
+            while (kotlinx.coroutines.isActive) {
                 val count = port.read(buffer, 1000)
                 if (count > 0) {
                     noDataCounter = 0
@@ -155,8 +166,13 @@ class FlightDownloadService : Service() {
                         writtenBytes += bytesToWrite
                     }
 
-                    // Обновляем уведомление в шторке
-                    updateNotification("Скачивание №$recordNum: $writtenBytes Б")
+                    // Обновление шторки не чаще 1 раза в секунду
+                    val currentTime = System.currentTimeMillis()
+                    if (currentTime - lastNotifTime > 1000) {
+                        val kb = writtenBytes / 1024
+                        updateNotification("Скачивание №$recordNum: $writtenBytes Б ($kb КБ)")
+                        lastNotifTime = currentTime
+                    }
 
                     if (bytesToRead != null && writtenBytes >= bytesToRead) break
                 } else {
