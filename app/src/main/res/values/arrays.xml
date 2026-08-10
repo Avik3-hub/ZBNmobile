@@ -25,4 +25,9 @@
         <item>19200</item>
         <item>9600</item>
     </string-array>
+        <string-array name="interfaces">
+        <item>RS-422</item>
+        <item>USB</item>
+    </string-array>
+    
 </resources>
