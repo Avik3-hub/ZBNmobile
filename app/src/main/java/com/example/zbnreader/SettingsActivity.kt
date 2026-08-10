@@ -4,11 +4,15 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 
 class SettingsActivity : AppCompatActivity() {
 
+    // Цветовая палитра в стиле Google Gemini (Dark Theme)
     private val COLOR_BG = Color.parseColor("#131314")
     private val COLOR_SURFACE = Color.parseColor("#1E1F20")
     private val COLOR_ACCENT = Color.parseColor("#A8C7FA")
@@ -27,12 +31,32 @@ class SettingsActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
 
-        // 1. Поле лимита включений (дефолт: 6)
-        val tvLimitLabel = TextView(this).apply {
-            text = "Количество выводимых включений:"
-            setTextColor(COLOR_TEXT)
-            textSize = 14f
+        // 0. ВЕРХНЯЯ ПАНЕЛЬ С КНОПКОЙ НАЗАД
+        val headerPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, 24)
         }
+
+        val btnBack = TextView(this).apply {
+            text = "←"
+            textSize = 24f
+            setTextColor(COLOR_TEXT)
+            setPadding(0, 0, 32, 0)
+            setOnClickListener { finish() }
+        }
+
+        val tvTitle = TextView(this).apply {
+            text = "Настройки приложения"
+            textSize = 18f
+            setTextColor(COLOR_TEXT)
+        }
+
+        headerPanel.addView(btnBack)
+        headerPanel.addView(tvTitle)
+        root.addView(headerPanel)
+
+        // 1. Поле лимита включений (дефолт: 6)
         val etLimit = EditText(this).apply {
             val savedLimit = try {
                 prefs.getInt("limit", 6)
@@ -41,22 +65,25 @@ class SettingsActivity : AppCompatActivity() {
             }
             setText(savedLimit.toString())
             setTextColor(COLOR_TEXT)
+            textSize = 14f
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
             background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
-            setPadding(20, 16, 20, 16)
+            setPadding(24, 20, 24, 20)
         }
 
-        // 2. Выпадающие списки (дефолт: индекс 0)
-        val spinnerSysType = createSpinner(R.array.system_types, prefs.getInt("system_type", 0))
-        val spinnerArinc = createSpinner(R.array.arinc_types, prefs.getInt("arinc", 0))
-        val spinnerRegSpeed = createSpinner(R.array.reg_speeds, prefs.getInt("reg_speed", 0))
-        val spinnerBaudRate = createSpinner(R.array.baud_rates, getBaudRateIndex(prefs.getInt("baud_rate", 921600)))
+        // 2. Выпадающие списки с кастомной стилизацией
+        val spinnerSysType = createCustomSpinner(R.array.system_types, prefs.getInt("system_type", 0))
+        val spinnerArinc = createCustomSpinner(R.array.arinc_types, prefs.getInt("arinc", 0))
+        val spinnerRegSpeed = createCustomSpinner(R.array.reg_speeds, prefs.getInt("reg_speed", 0))
+        val spinnerBaudRate = createCustomSpinner(R.array.baud_rates, getBaudRateIndex(prefs.getInt("baud_rate", 921600)))
 
         // 3. Кнопка сохранения
         val btnSave = Button(this).apply {
             text = "СОХРАНИТЬ НАСТРОЙКИ"
             setTextColor(COLOR_ACCENT_TEXT)
+            textSize = 14f
             background = createRoundedDrawable(COLOR_ACCENT, 20f)
+            setPadding(16, 24, 16, 24)
             setOnClickListener {
                 val limitVal = etLimit.text.toString().toIntOrNull() ?: 6
                 val baudRates = resources.getStringArray(R.array.baud_rates)
@@ -77,7 +104,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // Добавление элементов на экран
-        root.addView(tvLimitLabel)
+        root.addView(createLabel("Количество выводимых включений:"))
         root.addView(etLimit)
         root.addView(createLabel("Тип системы регистрации:"))
         root.addView(spinnerSysType)
@@ -85,13 +112,13 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(spinnerArinc)
         root.addView(createLabel("Скорость регистрации (поз./с):"))
         root.addView(spinnerRegSpeed)
-        root.addView(createLabel("Скорость обмена (Бод):"))
+        root.addView(createLabel("Скорость обмена RS-422 (Бод):"))
         root.addView(spinnerBaudRate)
 
         val saveParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { setMargins(0, 32, 0, 0) }
+        ).apply { setMargins(0, 40, 0, 0) }
         root.addView(btnSave, saveParams)
 
         setContentView(ScrollView(this).apply { addView(root) })
@@ -100,18 +127,36 @@ class SettingsActivity : AppCompatActivity() {
     private fun createLabel(text: String) = TextView(this).apply {
         this.text = text
         setTextColor(COLOR_TEXT)
-        textSize = 14f
-        setPadding(0, 24, 0, 8)
+        textSize = 13f
+        setPadding(0, 20, 0, 8)
     }
 
-    private fun createSpinner(arrayResId: Int, selectedIndex: Int): Spinner {
+    private fun createCustomSpinner(arrayResId: Int, selectedIndex: Int): Spinner {
+        val items = resources.getStringArray(arrayResId)
+        
+        // Кастомный адаптер для корректного цвета текста в Dark Theme
+        val adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, items) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getView(position, convertView, parent) as TextView
+                v.setTextColor(COLOR_TEXT)
+                v.textSize = 14f
+                v.setPadding(24, 20, 24, 20)
+                return v
+            }
+
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getDropDownView(position, convertView, parent) as TextView
+                v.setTextColor(COLOR_TEXT)
+                v.setBackgroundColor(COLOR_SURFACE)
+                v.textSize = 14f
+                v.setPadding(24, 20, 24, 20)
+                return v
+            }
+        }
+
         return Spinner(this).apply {
-            adapter = ArrayAdapter.createFromResource(
-                this@SettingsActivity,
-                arrayResId,
-                android.R.layout.simple_spinner_dropdown_item
-            )
-            setSelection(selectedIndex)
+            this.adapter = adapter
+            setSelection(if (selectedIndex >= 0 && selectedIndex < items.size) selectedIndex else 0)
             background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
         }
     }
@@ -119,7 +164,11 @@ class SettingsActivity : AppCompatActivity() {
     private fun getBaudRateIndex(baudRate: Int): Int {
         val rates = resources.getStringArray(R.array.baud_rates)
         val index = rates.indexOf(baudRate.toString())
-        return if (index >= 0) index else 0
+        if (index >= 0) return index
+        
+        // Если переданное значение не найдено, ищем 921600 по умолчанию
+        val defaultIndex = rates.indexOf("921600")
+        return if (defaultIndex >= 0) defaultIndex else 0
     }
 
     private fun createRoundedDrawable(bgColor: Int, radiusDp: Float, strokeColor: Int = 0, strokeWidthPx: Int = 0): GradientDrawable {
