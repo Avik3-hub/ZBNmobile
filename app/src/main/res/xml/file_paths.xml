@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <!-- Разрешает доступ к файлам во внутренней памяти приложения -->
-    <files-path name="internal_logs" path="." />
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Внутреннее приватное хранилище приложения -->
+    <files-path name="internal_files" path="." />
+
+    <!-- Кэш приложения -->
+    <cache-path name="cache_files" path="." />
+
+    <!-- Внешнее хранилище (папка ZBNreader с дампами и Excel) -->
+    <external-path name="external_files" path="." />
 </paths>
