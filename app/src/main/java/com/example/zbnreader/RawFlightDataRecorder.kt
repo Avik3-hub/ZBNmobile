@@ -1,136 +1,117 @@
 package com.example.zbnreader
 
 import android.content.Context
-import android.hardware.usb.UsbManager
 import com.hoho.android.usbserial.driver.UsbSerialPort
-import com.hoho.android.usbserial.driver.UsbSerialProber
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
-class RawFlightDataRecorder(private val context: Context) {
-
+class RawFlightDataRecorder(
+    private val context: Context,
+    private val usbPort: UsbSerialPort?,
+    private val baudRate: Int
+) {
     private val isRecording = AtomicBoolean(false)
-    private var usbPort: UsbSerialPort? = null
 
-    /**
-     * Запуск чтения RS-422 и прямого сохранения бинарного потока в файл.
-     * @param performHandshake Если true, отправляет 0x05 и 0x4D для запускa передачи из ЗБН.
-     */
     suspend fun startRecording(
-    baudRate: Int = 921600,
-    performHandshake: Boolean = true,
-    onBytesRecorded: (Long) -> Unit,
-    onError: (String) -> Unit
-)
-
-} = withContext(Dispatchers.IO) {
-        val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
-
-        // 1. Поиск подключенного USB-RS422 адаптера
-        val availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-        if (availableDrivers.isEmpty()) {
-            onError("USB-RS422 адаптер не обнаружен")
-            return@withContext
-        }
-
-        val driver = availableDrivers[0]
-        val connection = usbManager.openDevice(driver.device)
-            ?: run {
-                onError("Нет разрешения на доступ к USB-устройству")
-                return@withContext
-            }
-
-        // 2. Открытие и настройка COM-порта
-        try {
-            usbPort = driver.ports[0].apply {
-                open(connection)
-                setParameters(baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                
-                // Настройка сигналов управления для RS-422
-                dtr = false
-                rts = false
-            }
-        } catch (e: Exception) {
-            onError("Ошибка открытия порта: ${e.localizedMessage}")
-            return@withContext
-        }
-
-        // 3. Инициализация передачи, если требуется
-        if (performHandshake) {
-            try {
-                val port = usbPort ?: return@withContext
-                port.write(byteArrayOf(0x05), 1000)
-                val ack = ByteArray(1)
-                val bytesRead = port.read(ack, 1000)
-                if (bytesRead <= 0 || ack[0] != 0x06.toByte()) {
-                    onError("Ошибка связи: Накопитель не ответил на рукопожатие (ACK)")
-                    closePort()
-                    return@withContext
+        onBytesRecorded: (Long) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        withContext(Dispatchers.IO) {
+            if (usbPort == null) {
+                withContext(Dispatchers.Main) {
+                    onError("USB порт не инициализирован")
                 }
-                // Запуск непрерывного потока
-                port.write(byteArrayOf(0x4D.toByte()), 1000)
-            } catch (e: Exception) {
-                onError("Ошибка рукопожатия: ${e.localizedMessage}")
-                closePort()
                 return@withContext
             }
-        }
 
-        // 4. Подготовка файла для записи сырых байт
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val fileName = "FLIGHT_LOG_$timeStamp.bin"
-        val outputDirectory = context.getExternalFilesDir(null) ?: context.filesDir
-        val outputFile = File(outputDirectory, fileName)
+            try {
+                usbPort.setParameters(
+                    baudRate,
+                    UsbSerialPort.DATABITS_8,
+                    UsbSerialPort.STOPBITS_1,
+                    UsbSerialPort.PARITY_NONE
+                )
+                usbPort.dtr = false
+                usbPort.rts = false
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onError("Ошибка настройки RS-422: ${e.localizedMessage}")
+                }
+                return@withContext
+            }
 
-        isRecording.set(true)
-        var totalBytesWritten = 0L
-        var lastCallbackTime = 0L
+            if (!performHandshake()) {
+                withContext(Dispatchers.Main) {
+                    onError("Ошибка квитирования (Handshake failed)")
+                }
+                return@withContext
+            }
 
-        try {
-            // Буферизованный поток записи на диск
-            BufferedOutputStream(FileOutputStream(outputFile, true)).use { bufferedOutput ->
-                val buffer = ByteArray(8192)
+            val dirPath: File = context.getExternalFilesDir(null) ?: context.filesDir
+            val fileName = "flight_data_${System.currentTimeMillis()}.bin"
+            val file = File(dirPath, fileName)
 
-                while (isRecording.get()) {
-                    val bytesRead = usbPort?.read(buffer, 200) ?: 0
+            isRecording.set(true)
+            var totalBytesRecorded = 0L
+            val buffer = ByteArray(4096)
 
-                    if (bytesRead > 0) {
-                        bufferedOutput.write(buffer, 0, bytesRead)
-                        totalBytesWritten += bytesRead
-
-                        // Ограничение частоты обновления UI (не чаще 5 раз в секунду)
-                        val currentTime = System.currentTimeMillis()
-                        if (currentTime - lastCallbackTime > 200) {
-                            onBytesRecorded(totalBytesWritten)
-                            lastCallbackTime = currentTime
+            try {
+                FileOutputStream(file, true).use { fileOutputStream ->
+                    BufferedOutputStream(fileOutputStream).use { bufferedOutput ->
+                        while (isRecording.get()) {
+                            val len = usbPort.read(buffer, 1000)
+                            if (len > 0) {
+                                bufferedOutput.write(buffer, 0, len)
+                                totalBytesRecorded += len
+                                withContext(Dispatchers.Main) {
+                                    onBytesRecorded(totalBytesRecorded)
+                                }
+                            }
                         }
+                        bufferedOutput.flush()
                     }
                 }
-                bufferedOutput.flush()
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onError("Ошибка записи файла: ${e.localizedMessage}")
+                }
+            } finally {
+                isRecording.set(false)
             }
-            onBytesRecorded(totalBytesWritten)
-        } catch (e: Exception) {
-            onError("Ошибка записи: ${e.localizedMessage}")
-        } finally {
-            closePort()
+        }
+    }
+
+    private fun performHandshake(): Boolean {
+        if (usbPort == null) return false
+        return try {
+            val sendBuf = byteArrayOf(0x05) // ENQ
+            usbPort.write(sendBuf, 1000)
+
+            val readBuf = ByteArray(16)
+            val len = usbPort.read(readBuf, 1000)
+            if (len > 0 && readBuf[0] == 0x06.toByte()) { // ACK
+                usbPort.write(byteArrayOf(0x4D.toByte()), 1000) // Вызов передачи
+                true
+            } else {
+                true // Разрешаем продолжать, если устройство вещает без подтверждения
+            }
+        } catch (e: IOException) {
+            false
         }
     }
 
     fun stopRecording() {
         isRecording.set(false)
-    }
-
-    private fun closePort() {
         try {
-            usbPort?.close()
-        } catch (_: Exception) {}
-        usbPort = null
+            usbPort?.dtr = false
+            usbPort?.rts = false
+        } catch (e: Exception) {
+            // Игнорируем ошибки при закрытии
+        }
     }
 }
