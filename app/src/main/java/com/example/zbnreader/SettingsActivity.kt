@@ -1,6 +1,7 @@
 package com.example.zbnreader
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -9,6 +10,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
+import java.io.File
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -103,6 +106,18 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        // 4. Кнопка отправки логов
+        val btnShareLog = Button(this).apply {
+            text = "ОТПРАВИТЬ ЛОГ ОШИБОК"
+            setTextColor(COLOR_TEXT)
+            textSize = 14f
+            background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
+            setPadding(16, 24, 16, 24)
+            setOnClickListener {
+                shareLogFile()
+            }
+        }
+
         // Добавление элементов на экран
         root.addView(createLabel("Количество выводимых включений:"))
         root.addView(etLimit)
@@ -121,7 +136,41 @@ class SettingsActivity : AppCompatActivity() {
         ).apply { setMargins(0, 40, 0, 0) }
         root.addView(btnSave, saveParams)
 
+        val shareParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { setMargins(0, 20, 0, 0) }
+        root.addView(btnShareLog, shareParams)
+
         setContentView(ScrollView(this).apply { addView(root) })
+    }
+
+    private fun shareLogFile() {
+        try {
+            val logDir = getExternalFilesDir(null) ?: filesDir
+            val logFile = File(logDir, "app_log.txt")
+
+            if (!logFile.exists() || logFile.length() == 0L) {
+                Toast.makeText(this, "Файл лога пуст или не найден", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val fileUri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.provider",
+                logFile
+            )
+
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, fileUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            startActivity(Intent.createChooser(shareIntent, "Отправить лог ошибок"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка при отправке лога: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun createLabel(text: String) = TextView(this).apply {
@@ -134,7 +183,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun createCustomSpinner(arrayResId: Int, selectedIndex: Int): Spinner {
         val items = resources.getStringArray(arrayResId)
         
-        // Кастомный адаптер для корректного цвета текста в Dark Theme
         val adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, items) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val v = super.getView(position, convertView, parent) as TextView
@@ -166,7 +214,6 @@ class SettingsActivity : AppCompatActivity() {
         val index = rates.indexOf(baudRate.toString())
         if (index >= 0) return index
         
-        // Если переданное значение не найдено, ищем 921600 по умолчанию
         val defaultIndex = rates.indexOf("921600")
         return if (defaultIndex >= 0) defaultIndex else 0
     }
