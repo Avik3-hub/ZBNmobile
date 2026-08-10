@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <usb-device vendor-id="0403" /> <!-- FTDI -->
-    <usb-device vendor-id="1a86" /> <!-- CH340 -->
-    <usb-device vendor-id="10c4" /> <!-- CP2102 -->
-    <usb-device vendor-id="067b" /> <!-- PL2303 -->
+    <!-- FTDI (VID: 0x0403 = 1027) -->
+    <usb-device vendor-id="1027" />
+
+    <!-- CH340 / CH341 / CH34x (VID: 0x1A86 = 6790) -->
+    <usb-device vendor-id="6790" />
+
+    <!-- CP2102 / CP210X (VID: 0x10C4 = 4292) -->
+    <usb-device vendor-id="4292" />
+
+    <!-- PL2303 (VID: 0x067B = 1659) -->
+    <usb-device vendor-id="1659" />
+
+    <!-- Atmel / CDC ACM (VID: 0x03EB = 1003) -->
+    <usb-device vendor-id="1003" />
 </resources>
