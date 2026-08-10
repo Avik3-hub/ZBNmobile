@@ -24,11 +24,13 @@ class RawFlightDataRecorder(private val context: Context) {
      * @param performHandshake Если true, отправляет 0x05 и 0x4D для запускa передачи из ЗБН.
      */
     suspend fun startRecording(
-        baudRate: Int = 115200,
-        performHandshake: Boolean = true,
-        onBytesRecorded: (Long) -> Unit,
-        onError: (String) -> Unit
-    ) = withContext(Dispatchers.IO) {
+    baudRate: Int = 921600,
+    performHandshake: Boolean = true,
+    onBytesRecorded: (Long) -> Unit,
+    onError: (String) -> Unit
+)
+
+} = withContext(Dispatchers.IO) {
         val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
 
         // 1. Поиск подключенного USB-RS422 адаптера
