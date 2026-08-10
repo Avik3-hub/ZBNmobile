@@ -92,7 +92,7 @@ class FlightDownloadService : Service() {
         val port = driver.ports[0]
         try {
             val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-            val baud = prefs.getInt("baud_rate", 115200)
+            val baud = prefs.getInt("baud_rate", 921600)
             port.open(connection)
             port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
 
