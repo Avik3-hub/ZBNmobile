@@ -19,8 +19,7 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
-import com.hoho.android.usbserial.driver.Ch340SerialDriver
-import com.hoho.android.usbserial.driver.Cp2102SerialDriver
+import com.hoho.android.usbserial.driver.Ch34xSerialDriver
 import com.hoho.android.usbserial.driver.FtdiSerialDriver
 import com.hoho.android.usbserial.driver.ProbeTable
 import com.hoho.android.usbserial.driver.ProlificSerialDriver
@@ -245,35 +244,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Создание кастомного пробера с расширенным списком поддерживаемых USB-RS422/RS232 чипов
+     * Расширенная таблица пробера устройств на базе дефолтных драйверов библиотеки
      */
     private fun getCustomUsbProber(): UsbSerialProber {
-        val customTable = ProbeTable()
+        val customTable = UsbSerialProber.getDefaultProbeTable()
 
-        // FTDI чипы
+        // Дополнительные кастомные VID/PID
         customTable.addProduct(0x0403, 0x6001, FtdiSerialDriver::class.java)
         customTable.addProduct(0x0403, 0x6010, FtdiSerialDriver::class.java)
         customTable.addProduct(0x0403, 0x6014, FtdiSerialDriver::class.java)
         customTable.addProduct(0x0403, 0x6015, FtdiSerialDriver::class.java)
 
-        // CH340 / CH341 чипы
-        customTable.addProduct(0x1a86, 0x7523, Ch340SerialDriver::class.java)
-        customTable.addProduct(0x1a86, 0x5523, Ch340SerialDriver::class.java)
+        customTable.addProduct(0x1a86, 0x7523, Ch34xSerialDriver::class.java)
+        customTable.addProduct(0x1a86, 0x5523, Ch34xSerialDriver::class.java)
 
-        // Silicon Labs CP210x чипы
-        customTable.addProduct(0x10c4, 0xea60, Cp2102SerialDriver::class.java)
-
-        // Prolific PL2303
         customTable.addProduct(0x067b, 0x2303, ProlificSerialDriver::class.java)
-
-        // Стандартные CDC ACM драйверы
         customTable.addProduct(0x03eb, 0x204b, CdcAcmSerialDriver::class.java)
 
         return UsbSerialProber(customTable)
     }
 
     /**
-     * Диагностический поиск USB-устройств с фиксацией VID/PID в лог
+     * Поиск подключенного драйвера с диагностическим логированием в файл
      */
     private fun findUsbDriver(usbManager: UsbManager): UsbSerialDriver? {
         val rawDeviceList = usbManager.deviceList
@@ -294,7 +286,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Логирование в UI и параллельная запись в файл /ZBNreader/zbn_app_log.txt
+     * Логирование в UI и файл /ZBNreader/zbn_app_log.txt
      */
     private fun log(message: String, throwable: Throwable? = null) {
         val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
