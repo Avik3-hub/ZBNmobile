@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="system_types">
+        <item>БУР-1</item>
         <item>МСРП-А-02</item>
         <item>МСРП-64</item>
         <item>ТЕСТ</item>
@@ -31,4 +32,3 @@
         <item>9600</item>
     </string-array>
 </resources>
-
