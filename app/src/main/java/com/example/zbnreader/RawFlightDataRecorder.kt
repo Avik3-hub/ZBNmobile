@@ -17,6 +17,10 @@ class RawFlightDataRecorder(
 ) {
     private val isRecording = AtomicBoolean(false)
 
+    companion object {
+        private const val MAX_FILE_SIZE = 100 * 1024 * 1024 // 100 MB максимум
+    }
+
     suspend fun startRecording(
         onBytesRecorded: (Long) -> Unit,
         onError: (String) -> Unit
@@ -66,6 +70,13 @@ class RawFlightDataRecorder(
                         while (isRecording.get()) {
                             val len = usbPort.read(buffer, 1000)
                             if (len > 0) {
+                                // ИСПРАВЛЕНИЕ: Контроль максимального размера файла
+                                if (totalBytesRecorded + len > MAX_FILE_SIZE) {
+                                    withContext(Dispatchers.Main) {
+                                        onError("Ошибка: Размер файла превышен (максимум 100 MB)")
+                                    }
+                                    break
+                                }
                                 bufferedOutput.write(buffer, 0, len)
                                 totalBytesRecorded += len
                                 withContext(Dispatchers.Main) {
@@ -94,13 +105,17 @@ class RawFlightDataRecorder(
 
             val readBuf = ByteArray(16)
             val len = usbPort.read(readBuf, 1000)
+            // ИСПРАВЛЕНИЕ: Более строгая проверка Handshake
             if (len > 0 && readBuf[0] == 0x06.toByte()) { // ACK
                 usbPort.write(byteArrayOf(0x4D.toByte()), 1000) // Вызов передачи
                 true
             } else {
-                true // Разрешаем продолжать, если устройство вещает без подтверждения
+                // ИСПРАВЛЕНИЕ: Логируем проблему вместо молчаливого продолжения
+                android.util.Log.w("RawFlightDataRecorder", "Handshake: Устройство не отправило ACK. Код ответа: $len")
+                false // Теперь возвращаем false для более строгой проверки
             }
         } catch (e: IOException) {
+            android.util.Log.e("RawFlightDataRecorder", "IOException при handshake: ${e.localizedMessage}")
             false
         }
     }
@@ -111,7 +126,8 @@ class RawFlightDataRecorder(
             usbPort?.dtr = false
             usbPort?.rts = false
         } catch (e: Exception) {
-            // Игнорируем ошибки при закрытии
+            // Логируем ошибку вместо молчаливого игнорирования
+            android.util.Log.w("RawFlightDataRecorder", "Ошибка при остановке записи: ${e.localizedMessage}")
         }
     }
 }
