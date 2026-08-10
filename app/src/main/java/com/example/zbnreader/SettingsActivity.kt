@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.view.Gravity
@@ -13,6 +14,8 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -107,15 +110,15 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        // 4. Кнопка отправки логов
-        val btnShareLog = Button(this).apply {
-            text = "ОТПРАВИТЬ ЛОГ ОШИБОК"
+        // 4. Кнопка сохранения логов
+        val btnSaveLog = Button(this).apply {
+            text = "СОХРАНИТЬ ЛОГ ОШИБОК"
             setTextColor(COLOR_TEXT)
             textSize = 14f
             background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
             setPadding(16, 24, 16, 24)
             setOnClickListener {
-                shareLogFile()
+                saveLogFile()
             }
         }
 
@@ -137,42 +140,56 @@ class SettingsActivity : AppCompatActivity() {
         ).apply { setMargins(0, 40, 0, 0) }
         root.addView(btnSave, saveParams)
 
-        val shareParams = LinearLayout.LayoutParams(
+        val saveLogParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { setMargins(0, 20, 0, 0) }
-        root.addView(btnShareLog, shareParams)
+        root.addView(btnSaveLog, saveLogParams)
 
         setContentView(ScrollView(this).apply { addView(root) })
     }
 
-    private fun shareLogFile() {
+    private fun saveLogFile() {
         try {
-            // ИСПРАВЛЕНИЕ: Используем ту же папку внутри изолированного хранилища приложения
+            // Получаем исходный лог файл из папки приложения
             val logDir = File(getExternalFilesDir(null), "ZBNreader")
-            val logFile = File(logDir, "zbn_app_log.txt")
+            val sourceLogFile = File(logDir, "zbn_app_log.txt")
 
-            if (!logFile.exists() || logFile.length() == 0L) {
+            if (!sourceLogFile.exists() || sourceLogFile.length() == 0L) {
                 Toast.makeText(this, "Файл лога пуст или еще не создан", Toast.LENGTH_SHORT).show()
                 return
             }
 
-            // ИСПРАВЛЕНИЕ: Проверяем, что authorities совпадает с AndroidManifest.xml
-            val fileUri = FileProvider.getUriForFile(
-                this,
-                "${packageName}.fileprovider", // Должно совпадать с android:authorities в Manifest
-                logFile
-            )
-
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, fileUri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // ИСПРАВЛЕНИЕ: Сохраняем в папку ZBNreader в корне телефона
+            val rootDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Для Android 11+ используем стандартный Documents/Downloads директорий
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            } else {
+                Environment.getExternalStorageDirectory()
+            }
+            
+            val zbsFolder = File(rootDir, "ZBNreader")
+            if (!zbsFolder.exists()) {
+                zbsFolder.mkdirs()
             }
 
-            startActivity(Intent.createChooser(shareIntent, "Отправить подробный лог"))
+            // Создаем имя файла с меткой времени
+            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val destLogFile = File(zbsFolder, "zbn_app_log_$timeStamp.txt")
+
+            // Копируем содержимое файла
+            sourceLogFile.copyTo(destLogFile, overwrite = true)
+
+            Toast.makeText(
+                this,
+                "Лог успешно сохранен в ZBNreader/$${destLogFile.name}",
+                Toast.LENGTH_LONG
+            ).show()
+
+            android.util.Log.i("SettingsActivity", "Лог сохранен в: ${destLogFile.absolutePath}")
         } catch (e: Exception) {
-            Toast.makeText(this, "Ошибка при отправке лога: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Ошибка при сохранении лога: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            android.util.Log.e("SettingsActivity", "Ошибка сохранения лога", e)
         }
     }
 
