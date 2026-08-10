@@ -147,33 +147,34 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun shareLogFile() {
-        try {
-            val rootDir = Environment.getExternalStorageDirectory()
-            val mainFolder = File(rootDir, "ZBNreader")
-            val logFile = File(mainFolder, "zbn_app_log.txt")
+    try {
+        // Указываем ту же папку внутри изолированного хранилища приложения
+        val logDir = File(getExternalFilesDir(null), "ZBNreader")
+        val logFile = File(logDir, "zbn_app_log.txt")
 
-            if (!logFile.exists() || logFile.length() == 0L) {
-                Toast.makeText(this, "Файл лога пуст или не найден", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            val fileUri = FileProvider.getUriForFile(
-                this,
-                "${packageName}.provider",
-                logFile
-            )
-
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, fileUri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-
-            startActivity(Intent.createChooser(shareIntent, "Отправить лог ошибок"))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Ошибка при отправке лога: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        if (!logFile.exists() || logFile.length() == 0L) {
+            Toast.makeText(this, "Файл лога пуст или еще не создан", Toast.LENGTH_SHORT).show()
+            return
         }
+
+        val fileUri = FileProvider.getUriForFile(
+            this,
+            "${packageName}.provider",
+            logFile
+        )
+
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, fileUri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        startActivity(Intent.createChooser(shareIntent, "Отправить подробный лог"))
+    } catch (e: Exception) {
+        Toast.makeText(this, "Ошибка при отправке лога: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
     }
+}
+
 
     private fun createLabel(text: String) = TextView(this).apply {
         this.text = text
