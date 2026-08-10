@@ -84,7 +84,9 @@ class ZbnTocParser {
         val flightNumVal = (frame[11].toInt() and 0xFF).toString()
 
         // Байт 1: Статусный байт / Бортовой номер
-        val tailNumVal = String.format(Locale.US, "%02X", frame[1].toInt() and 0xFF)
+        // ИСПРАВЛЕНИЕ: Преобразование в понятный десятичный формат вместо HEX
+        val tailNumRaw = frame[1].toInt() and 0xFF
+        val tailNumVal = String.format(Locale.US, "%03d", tailNumRaw)
 
         return FlightRecord(
             number = sectorIndex,
