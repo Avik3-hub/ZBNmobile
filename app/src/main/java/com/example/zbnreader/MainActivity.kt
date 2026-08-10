@@ -156,7 +156,6 @@ class MainActivity : AppCompatActivity() {
         tableLayout = TableLayout(this).apply {
             isStretchAllColumns = false
         }
-
         verticalScroll.addView(tableLayout)
         scrollTable.addView(verticalScroll)
         tableCard.addView(scrollTable)
@@ -233,7 +232,6 @@ class MainActivity : AppCompatActivity() {
             setTextColor(COLOR_TEXT_MUTED)
             setPadding(8, 8, 8, 8)
         }
-
         scrollViewLog.addView(tvLog)
         logCard.addView(scrollViewLog)
         root.addView(logCard)
@@ -243,42 +241,33 @@ class MainActivity : AppCompatActivity() {
         log("Приложение запущено. Готовность к работе.")
     }
 
-    /**
-     * Таблица пробера устройств
-     */
     private fun getCustomUsbProber(): UsbSerialProber {
         val customTable = UsbSerialProber.getDefaultProbeTable()
-
-        // Чип FTDI FT232RL (как на вашем фото)
+        // Чип FTDI FT232RL
         customTable.addProduct(0x0403, 0x6001, FtdiSerialDriver::class.java)
         customTable.addProduct(0x0403, 0x6010, FtdiSerialDriver::class.java)
         customTable.addProduct(0x0403, 0x6014, FtdiSerialDriver::class.java)
         customTable.addProduct(0x0403, 0x6015, FtdiSerialDriver::class.java)
-
         // Другие поддерживаемые адаптеры
         customTable.addProduct(0x1a86, 0x7523, Ch34xSerialDriver::class.java)
         customTable.addProduct(0x1a86, 0x5523, Ch34xSerialDriver::class.java)
         customTable.addProduct(0x067b, 0x2303, ProlificSerialDriver::class.java)
         customTable.addProduct(0x03eb, 0x204b, CdcAcmSerialDriver::class.java)
-
         return UsbSerialProber(customTable)
     }
 
     private fun findUsbDriver(usbManager: UsbManager): UsbSerialDriver? {
         val rawDeviceList = usbManager.deviceList
         log("Физически подключено USB-устройств: ${rawDeviceList.size}")
-
         for ((_, device) in rawDeviceList) {
             val vidHex = String.format("0x%04X", device.vendorId)
             val pidHex = String.format("0x%04X", device.productId)
             log("-> Обнаружен USB: VID=$vidHex, PID=$pidHex, Name=${device.deviceName}")
         }
-
         var drivers = getCustomUsbProber().findAllDrivers(usbManager)
         if (drivers.isEmpty()) {
             drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
         }
-
         return drivers.firstOrNull()
     }
 
@@ -289,11 +278,9 @@ class MainActivity : AppCompatActivity() {
         } else {
             "[$timeStamp] $message"
         }
-
         runOnUiThread {
             tvLog.append("$logLine\n")
         }
-
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val rootDir = Environment.getExternalStorageDirectory()
@@ -437,19 +424,16 @@ class MainActivity : AppCompatActivity() {
         selectedRow = null
         setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         setCustomButtonState(btnExportExcel, records.isNotEmpty(), COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
-
         records.forEach { record ->
             val row = TableRow(this).apply {
                 setPadding(6, 8, 6, 8)
                 setOnClickListener { selectRow(this, record) }
             }
-
             when {
                 errorRecordNumbers.contains(record.number) -> row.setBackgroundColor(COLOR_ERROR)
                 isFlightDownloaded(record) || downloadedRecordNumbers.contains(record.number) -> row.setBackgroundColor(COLOR_DOWNLOADED)
                 else -> row.setBackgroundColor(Color.TRANSPARENT)
             }
-
             val fields = arrayOf(
                 record.number.toString(),
                 "${record.sizeBytes} Б",
@@ -460,7 +444,6 @@ class MainActivity : AppCompatActivity() {
                 record.flightNum,
                 record.tailNum
             )
-
             fields.forEach { textVal ->
                 val tv = TextView(this).apply {
                     text = textVal
@@ -504,32 +487,25 @@ class MainActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         tvLog.text = ""
         tvStatus.text = "Статус: Подключение..."
-
         val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
         
-        // УСТАНОВЛЕНО 921600 ПО УМОЛЧАНИЮ (как в настройках ПК)
         val currentBaudRate = prefs.getInt("baud_rate", 921600)
         
-        // УСТАНОВЛЕНО 6 ВКЛЮЧЕНИЙ ПО УМОЛЧАНИЮ (как в настройках ПК)
         val sessionLimit = try {
             prefs.getInt("limit", 6)
         } catch (_: Exception) {
             prefs.getString("limit", "6")?.toIntOrNull() ?: 6
         }
-
         log("Запуск сканирования. Скорость: $currentBaudRate бод, Лимит: $sessionLimit")
-
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val driver = findUsbDriver(usbManager)
-
             if (driver == null) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен или не опознан!")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
                 return@launch
             }
-
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
                 log("Ошибка: Нет разрешения на использование USB!")
@@ -537,26 +513,22 @@ class MainActivity : AppCompatActivity() {
                 resetUi()
                 return@launch
             }
-
             val port = driver.ports[0]
             try {
                 port.open(connection)
                 port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                 port.dtr = false
                 port.rts = false
-
                 log("Отправка ENQ (0x05)...")
                 port.write(byteArrayOf(0x05), 1000)
                 val ackBuf = ByteArray(1)
                 val readAck = port.read(ackBuf, 1000)
-
                 if (readAck == 0 || ackBuf[0] != 0x06.toByte()) {
                     log("Ошибка: Ответ от ЗБН не получен (Ожидался ACK 0x06, получено байт: $readAck)")
                     updateStatus("Статус: Сбой рукопожатия")
                     resetUi()
                     return@launch
                 }
-
                 log("Рукопожатие успешно (получен ACK 0x06). Чтение оглавления...")
                 val records = readCatalog(port, sessionLimit)
                 runOnUiThread {
@@ -564,7 +536,6 @@ class MainActivity : AppCompatActivity() {
                     flightList.addAll(records)
                     updateTableUI(flightList)
                 }
-
                 if (records.isEmpty()) {
                     updateStatus("Статус: Оглавление пусто")
                     log("Оглавление пустое или не удалось распарсить записи.")
@@ -587,7 +558,6 @@ class MainActivity : AppCompatActivity() {
         port.write(byteArrayOf(0x4D.toByte()), 1000)
         val buffer = ByteArray(16384)
         var noDataCounter = 0
-
         while (flights.size < limit && noDataCounter < 3) {
             try {
                 val count = port.read(buffer, 1000)
@@ -617,16 +587,13 @@ class MainActivity : AppCompatActivity() {
         val record = selectedRecord ?: return
         val currentIndex = flightList.indexOf(record)
         val startOffset = record.sizeBytes
-
         val bytesToRead: Long? = if (currentIndex >= 0 && currentIndex < flightList.size - 1) {
             flightList[currentIndex + 1].sizeBytes - startOffset
         } else {
             null
         }
-
         setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.visibility = View.VISIBLE
-
         if (bytesToRead != null && bytesToRead > 0) {
             progressBar.isIndeterminate = false
             progressBar.max = 100
@@ -636,13 +603,10 @@ class MainActivity : AppCompatActivity() {
             progressBar.isIndeterminate = true
             tvStatus.text = "Статус: Скачивание №${record.number}..."
         }
-
         log("Начало копирования включения №${record.number}. Офсет: $startOffset, Размер: ${bytesToRead ?: "Неизвестен"}")
-
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val driver = findUsbDriver(usbManager)
-
             if (driver == null) {
                 log("Ошибка скачивания: Конвертер USB не найден")
                 errorRecordNumbers.add(record.number)
@@ -650,7 +614,6 @@ class MainActivity : AppCompatActivity() {
                 resetUi()
                 return@launch
             }
-
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
                 log("Ошибка скачивания: Нет прав USB")
@@ -659,22 +622,32 @@ class MainActivity : AppCompatActivity() {
                 resetUi()
                 return@launch
             }
-
             val port = driver.ports[0]
             var outputFile: File? = null
-
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
                 val baud = prefs.getInt("baud_rate", 921600)
-
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                
+                // Исправление 1: Явный сброс сигналов RS-422
+                port.dtr = false
+                port.rts = false
+
+                // Исправление 2: Проверка ACK (0x06)
                 port.write(byteArrayOf(0x05), 1000)
                 val ack = ByteArray(1)
-                port.read(ack, 1000)
+                val readAck = port.read(ack, 1000)
+                if (readAck <= 0 || ack[0] != 0x06.toByte()) {
+                    log("Ошибка скачивания: Накопитель не ответил на рукопожатие (ACK)")
+                    errorRecordNumbers.add(record.number)
+                    updateStatus("Статус: Сбой рукопожатия")
+                    runOnUiThread { updateTableUI(flightList) }
+                    resetUi()
+                    return@launch
+                }
 
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
-
                 val dateFormatted = try {
                     val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
                     val parsedDate = inputFormat.parse(record.date.trim())
@@ -682,16 +655,15 @@ class MainActivity : AppCompatActivity() {
                 } catch (_: Exception) {
                     SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
                 }
-
                 val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
                 val aircraftFolder = getAircraftFolder(record.tailNum)
                 outputFile = File(aircraftFolder, fileName)
-
                 val fos = FileOutputStream(outputFile)
                 val buffer = ByteArray(16384)
                 var skippedBytes = 0L
                 var writtenBytes = 0L
                 var noDataCounter = 0
+                var lastUiUpdateTime = 0L
 
                 while (true) {
                     val count = port.read(buffer, 1000)
@@ -706,7 +678,6 @@ class MainActivity : AppCompatActivity() {
                                 val validDataStart = neededToSkip.toInt()
                                 val validLength = count - validDataStart
                                 skippedBytes = startOffset
-
                                 val bytesToWrite = if (bytesToRead != null && (writtenBytes + validLength) > bytesToRead) {
                                     (bytesToRead - writtenBytes).toInt()
                                 } else {
@@ -725,15 +696,20 @@ class MainActivity : AppCompatActivity() {
                             writtenBytes += bytesToWrite
                         }
 
-                        val currentWritten = writtenBytes
-                        runOnUiThread {
-                            if (bytesToRead != null && bytesToRead > 0) {
-                                val percent = ((currentWritten * 100) / bytesToRead).toInt().coerceAtMost(100)
-                                progressBar.progress = percent
-                                tvStatus.text = "Статус: Скачивание №${record.number}... $percent%"
-                            } else {
-                                tvStatus.text = "Статус: Скачивание №${record.number}... ($currentWritten Б)"
+                        // Исправление 3: Ограничение обновлений UI не чаще 3 раз в секунду
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastUiUpdateTime > 300) {
+                            val currentWritten = writtenBytes
+                            runOnUiThread {
+                                if (bytesToRead != null && bytesToRead > 0) {
+                                    val percent = ((currentWritten * 100) / bytesToRead).toInt().coerceAtMost(100)
+                                    progressBar.progress = percent
+                                    tvStatus.text = "Статус: Скачивание №${record.number}... $percent%"
+                                } else {
+                                    tvStatus.text = "Статус: Скачивание №${record.number}... ($currentWritten Б)"
+                                }
                             }
+                            lastUiUpdateTime = currentTime
                         }
 
                         if (bytesToRead != null && writtenBytes >= bytesToRead) break
@@ -742,10 +718,8 @@ class MainActivity : AppCompatActivity() {
                         if (noDataCounter >= 3) break
                     }
                 }
-
                 fos.flush()
                 fos.close()
-
                 if (bytesToRead != null && writtenBytes < bytesToRead) {
                     log("Ошибка: Передача прервана. Записано $writtenBytes из $bytesToRead байт.")
                     errorRecordNumbers.add(record.number)
@@ -755,14 +729,11 @@ class MainActivity : AppCompatActivity() {
                     val sysTypes = resources.getStringArray(R.array.system_types)
                     val arincTypes = resources.getStringArray(R.array.arinc_types)
                     val regSpeeds = resources.getStringArray(R.array.reg_speeds)
-
-                    // ОБНОВЛЕННЫЕ ДЕФОЛТНЫЕ МЕТАДАННЫЕ
+                    
                     val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "БУР-1" }
                     val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "573" }
                     val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "64" }
-
                     saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
-
                     downloadedRecordNumbers.add(record.number)
                     errorRecordNumbers.remove(record.number)
                     log("Успешно сохранен рейс №${record.flightNum} ($writtenBytes байт)")
@@ -788,20 +759,16 @@ class MainActivity : AppCompatActivity() {
         progressBar.isIndeterminate = true
         progressBar.visibility = View.VISIBLE
         tvStatus.text = "Статус: Чтение всего ЗБН..."
-
         log("Запуск чтения полного дампа ЗБН...")
-
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val driver = findUsbDriver(usbManager)
-
             if (driver == null) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
                 return@launch
             }
-
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
                 log("Ошибка: Нет доступа к USB при дампе")
@@ -809,14 +776,15 @@ class MainActivity : AppCompatActivity() {
                 resetUi()
                 return@launch
             }
-
             val port = driver.ports[0]
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
                 val baud = prefs.getInt("baud_rate", 921600)
-
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                port.dtr = false
+                port.rts = false
+                
                 downloadFullDump(port)
             } catch (e: Exception) {
                 log("Сбой при выполнении полного дампа ЗБН", e)
@@ -829,14 +797,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadFullDump(port: UsbSerialPort) {
+        // Проверка рукопожатия перед дампом
+        port.write(byteArrayOf(0x05), 1000)
+        val ack = ByteArray(1)
+        val readAck = port.read(ack, 1000)
+        if (readAck <= 0 || ack[0] != 0x06.toByte()) {
+            log("Ошибка дампа: ЗБН не ответил (ACK не получен)")
+            updateStatus("Статус: Сбой рукопожатия")
+            return
+        }
+
         port.write(byteArrayOf(0x4D.toByte()), 1000)
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val fileName = "ZBN_DUMP_$timeStamp"
-
         val tailNum = flightList.firstOrNull { it.tailNum.isNotBlank() }?.tailNum ?: "Дамп"
         val aircraftFolder = getAircraftFolder(tailNum)
         val outputFile = File(aircraftFolder, fileName)
         var fos: FileOutputStream? = null
+        var lastUiUpdateTime = 0L
 
         try {
             fos = FileOutputStream(outputFile)
@@ -850,36 +828,36 @@ class MainActivity : AppCompatActivity() {
                     fos.write(buffer, 0, count)
                     totalBytes += count
                     noDataCounter = 0
-                    val currentTotal = totalBytes
-                    runOnUiThread {
-                        tvStatus.text = "Статус: Чтение всего ЗБН... ($currentTotal Б)"
+
+                    val currentTime = System.currentTimeMillis()
+                    if (currentTime - lastUiUpdateTime > 300) {
+                        val currentTotal = totalBytes
+                        runOnUiThread {
+                            tvStatus.text = "Статус: Чтение всего ЗБН... ($currentTotal Б)"
+                        }
+                        lastUiUpdateTime = currentTime
                     }
                 } else {
                     noDataCounter++
                     if (noDataCounter >= 3) break
                 }
             }
-
             fos.flush()
             fos.close()
-
             if (totalBytes == 0) {
                 log("Ошибка дампа: Принято 0 байт данных")
                 updateStatus("Статус: Ошибка (Нет данных)")
                 if (outputFile.exists()) outputFile.delete()
                 return
             }
-
             val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
             val sysTypes = resources.getStringArray(R.array.system_types)
             val arincTypes = resources.getStringArray(R.array.arinc_types)
             val regSpeeds = resources.getStringArray(R.array.reg_speeds)
-
-            // ОБНОВЛЕННЫЕ ДЕФОЛТНЫЕ МЕТАДАННЫЕ
+            
             val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "БУР-1" }
             val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "573" }
             val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "64" }
-
             saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
             log("Полный дамп успешен: Сохранено $totalBytes байт в $fileName")
             updateStatus("Статус: Весь ЗБН сохранен ($totalBytes Б)")
@@ -896,18 +874,15 @@ class MainActivity : AppCompatActivity() {
             updateStatus("Статус: Таблица пуста")
             return
         }
-
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val workbook = XSSFWorkbook()
                 val sheet = workbook.createSheet("Лист1")
                 val headerRow = sheet.createRow(0)
                 val headers = arrayOf("№", "Размер", "Дата", "ВремяЗап", "Начало", "Конец", "Рейс", "Борт", "Сбоев")
-
                 for ((index, header) in headers.withIndex()) {
                     headerRow.createCell(index).setCellValue(header)
                 }
-
                 for ((rowIndex, record) in flightList.withIndex()) {
                     val row = sheet.createRow(rowIndex + 1)
                     row.createCell(0).setCellValue(record.number.toDouble())
@@ -916,21 +891,17 @@ class MainActivity : AppCompatActivity() {
                     row.createCell(3).setCellValue(record.duration)
                     row.createCell(4).setCellValue(record.startTime)
                     row.createCell(5).setCellValue(record.endTime)
-
                     record.flightNum.toDoubleOrNull()?.let { row.createCell(6).setCellValue(it) }
                         ?: row.createCell(6).setCellValue(record.flightNum)
-
                     record.tailNum.toDoubleOrNull()?.let { row.createCell(7).setCellValue(it) }
                         ?: row.createCell(7).setCellValue(record.tailNum)
                     row.createCell(8).setCellValue("")
                 }
-
                 val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
                 val fileName = "Список_включений_$timeStamp.xlsx"
                 val tailNum = flightList.firstOrNull { it.tailNum.isNotBlank() }?.tailNum ?: "Общий"
                 val aircraftFolder = getAircraftFolder(tailNum)
                 val outputFile = File(aircraftFolder, fileName)
-
                 FileOutputStream(outputFile).use { fos ->
                     workbook.write(fos)
                 }
