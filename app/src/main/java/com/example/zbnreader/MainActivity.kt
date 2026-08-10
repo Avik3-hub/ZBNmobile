@@ -244,29 +244,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Расширенная таблица пробера устройств на базе дефолтных драйверов библиотеки
+     * Таблица пробера устройств
      */
     private fun getCustomUsbProber(): UsbSerialProber {
         val customTable = UsbSerialProber.getDefaultProbeTable()
 
-        // Дополнительные кастомные VID/PID
+        // Чип FTDI FT232RL (как на вашем фото)
         customTable.addProduct(0x0403, 0x6001, FtdiSerialDriver::class.java)
         customTable.addProduct(0x0403, 0x6010, FtdiSerialDriver::class.java)
         customTable.addProduct(0x0403, 0x6014, FtdiSerialDriver::class.java)
         customTable.addProduct(0x0403, 0x6015, FtdiSerialDriver::class.java)
 
+        // Другие поддерживаемые адаптеры
         customTable.addProduct(0x1a86, 0x7523, Ch34xSerialDriver::class.java)
         customTable.addProduct(0x1a86, 0x5523, Ch34xSerialDriver::class.java)
-
         customTable.addProduct(0x067b, 0x2303, ProlificSerialDriver::class.java)
         customTable.addProduct(0x03eb, 0x204b, CdcAcmSerialDriver::class.java)
 
         return UsbSerialProber(customTable)
     }
 
-    /**
-     * Поиск подключенного драйвера с диагностическим логированием в файл
-     */
     private fun findUsbDriver(usbManager: UsbManager): UsbSerialDriver? {
         val rawDeviceList = usbManager.deviceList
         log("Физически подключено USB-устройств: ${rawDeviceList.size}")
@@ -285,9 +282,6 @@ class MainActivity : AppCompatActivity() {
         return drivers.firstOrNull()
     }
 
-    /**
-     * Логирование в UI и файл /ZBNreader/zbn_app_log.txt
-     */
     private fun log(message: String, throwable: Throwable? = null) {
         val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
         val logLine = if (throwable != null) {
@@ -512,11 +506,15 @@ class MainActivity : AppCompatActivity() {
         tvStatus.text = "Статус: Подключение..."
 
         val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-        val currentBaudRate = prefs.getInt("baud_rate", 115200)
+        
+        // УСТАНОВЛЕНО 921600 ПО УМОЛЧАНИЮ (как в настройках ПК)
+        val currentBaudRate = prefs.getInt("baud_rate", 921600)
+        
+        // УСТАНОВЛЕНО 6 ВКЛЮЧЕНИЙ ПО УМОЛЧАНИЮ (как в настройках ПК)
         val sessionLimit = try {
-            prefs.getInt("limit", 10)
+            prefs.getInt("limit", 6)
         } catch (_: Exception) {
-            prefs.getString("limit", "10")?.toIntOrNull() ?: 10
+            prefs.getString("limit", "6")?.toIntOrNull() ?: 6
         }
 
         log("Запуск сканирования. Скорость: $currentBaudRate бод, Лимит: $sessionLimit")
@@ -667,7 +665,7 @@ class MainActivity : AppCompatActivity() {
 
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-                val baud = prefs.getInt("baud_rate", 115200)
+                val baud = prefs.getInt("baud_rate", 921600)
 
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
@@ -758,9 +756,10 @@ class MainActivity : AppCompatActivity() {
                     val arincTypes = resources.getStringArray(R.array.arinc_types)
                     val regSpeeds = resources.getStringArray(R.array.reg_speeds)
 
-                    val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
-                    val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
-                    val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
+                    // ОБНОВЛЕННЫЕ ДЕФОЛТНЫЕ МЕТАДАННЫЕ
+                    val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "БУР-1" }
+                    val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "573" }
+                    val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "64" }
 
                     saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
 
@@ -814,7 +813,7 @@ class MainActivity : AppCompatActivity() {
             val port = driver.ports[0]
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-                val baud = prefs.getInt("baud_rate", 115200)
+                val baud = prefs.getInt("baud_rate", 921600)
 
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
@@ -876,9 +875,10 @@ class MainActivity : AppCompatActivity() {
             val arincTypes = resources.getStringArray(R.array.arinc_types)
             val regSpeeds = resources.getStringArray(R.array.reg_speeds)
 
-            val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "МСРП-А-02" }
-            val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "717" }
-            val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
+            // ОБНОВЛЕННЫЕ ДЕФОЛТНЫЕ МЕТАДАННЫЕ
+            val sysType = sysTypes.getOrElse(prefs.getInt("system_type", 0)) { "БУР-1" }
+            val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "573" }
+            val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "64" }
 
             saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
             log("Полный дамп успешен: Сохранено $totalBytes байт в $fileName")
