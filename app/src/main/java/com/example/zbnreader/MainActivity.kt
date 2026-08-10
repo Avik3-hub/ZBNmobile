@@ -272,25 +272,45 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun log(message: String, throwable: Throwable? = null) {
-        val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
-        val logLine = if (throwable != null) {
-            "[$timeStamp] $message\nИсключение: ${throwable.localizedMessage}\n${throwable.stackTraceToString()}"
-        } else {
-            "[$timeStamp] $message"
-        }
-        runOnUiThread {
+    val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
+    val logLine = if (throwable != null) {
+        "[$timeStamp] $message\nИсключение: ${throwable.localizedMessage}\n${throwable.stackTraceToString()}"
+    } else {
+        "[$timeStamp] $message"
+    }
+
+    // 1. Всегда дублируем в системный Logcat (доступен в Android Studio во время отладки)
+    android.util.Log.d("ZBN_DEBUG", logLine)
+
+    // 2. Вывод на экран в текстовое поле
+    runOnUiThread {
+        try {
             tvLog.append("$logLine\n")
-        }
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val rootDir = Environment.getExternalStorageDirectory()
-                val mainFolder = File(rootDir, "ZBNreader")
-                if (!mainFolder.exists()) mainFolder.mkdirs()
-                val logFile = File(mainFolder, "zbn_app_log.txt")
-                logFile.appendText("$logLine\n----------------------------------------\n")
-            } catch (_: Exception) {}
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
+
+    // 3. Запись в файл в фоновом потоке
+    lifecycleScope.launch(Dispatchers.IO) {
+        try {
+            // Используем изолированную папку приложения — она не требует разрешений 
+            // и никогда не блокируется системой на любых версиях Android.
+            val mainFolder = File(getExternalFilesDir(null), "ZBNreader")
+            if (!mainFolder.exists()) {
+                mainFolder.mkdirs()
+            }
+            
+            val logFile = File(mainFolder, "zbn_app_log.txt")
+            logFile.appendText("$logLine\n----------------------------------------\n")
+        } catch (e: Exception) {
+            // ВАЖНО: Больше не глушим ошибки! Если запись не удалась, 
+            // вы увидите причину в Logcat по тегу ZBN_DEBUG.
+            android.util.Log.e("ZBN_DEBUG", "Ошибка записи лога на диск: ${e.localizedMessage}")
+        }
+    }
+}
+
 
     private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
         button.isEnabled = enabled
