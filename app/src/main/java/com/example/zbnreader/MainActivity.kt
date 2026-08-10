@@ -38,13 +38,13 @@ class MainActivity : AppCompatActivity() {
     private val COLOR_ACCENT = Color.parseColor("#A8C7FA")
     private val COLOR_ACCENT_TEXT = Color.parseColor("#041E49")
     private val COLOR_TEXT = Color.parseColor("#E3E3E3")
-    private val COLOR_TEXT_MUTED = Color.parseColor("#757775") // Более приглушенный для неактивных элементов
+    private val COLOR_TEXT_MUTED = Color.parseColor("#757775")
     private val COLOR_BORDER = Color.parseColor("#444746")
-    private val COLOR_DISABLED_BG = Color.parseColor("#181819") // Бледно-темный фон для неактивных кнопок
+    private val COLOR_DISABLED_BG = Color.parseColor("#181819")
 
     // Статусные цвета для строк таблицы
-    private val COLOR_DOWNLOADED = Color.parseColor("#1A3852") // Нежно-голубой для скачанных
-    private val COLOR_ERROR = Color.parseColor("#4A2828")      // Бледно-красный для ошибок
+    private val COLOR_DOWNLOADED = Color.parseColor("#1A3852")
+    private val COLOR_ERROR = Color.parseColor("#4A2828")
 
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
@@ -65,6 +65,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Глобальный перехватчик критических сбоев (чтобы логировать даже падения приложения)
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            log("КРИТИЧЕСКИЙ СБОЙ ПРИЛОЖЕНИЯ в потоке ${thread.name}", throwable)
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         checkAndRequestStoragePermissions()
 
         val root = LinearLayout(this).apply {
@@ -73,7 +81,7 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(COLOR_BG)
         }
 
-        // 1. ВЕРХНЯЯ ПАНЕЛЬ (Отображение текста статуса)
+        // 1. ВЕРХНЯЯ ПАНЕЛЬ
         val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -121,7 +129,7 @@ class MainActivity : AppCompatActivity() {
         btnStart.layoutParams = startParams
         root.addView(btnStart)
 
-        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ (Карточка)
+        // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ
         val tableCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = createRoundedDrawable(COLOR_SURFACE, 20f)
@@ -197,7 +205,7 @@ class MainActivity : AppCompatActivity() {
         actionPanel.addView(btnExportExcel)
         root.addView(actionPanel)
 
-        // 6. ОКНО КОНСОЛИ (Карточка)
+        // 6. ОКНО КОНСОЛИ
         val logCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = createRoundedDrawable(COLOR_SURFACE, 20f)
@@ -226,6 +234,33 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(root)
         renderTableHeader()
+        log("Приложение запущено. Готовность к работе.")
+    }
+
+    /**
+     * Расширенное логирование: выводит в UI и сохраняет в /ZBNreader/zbn_app_log.txt
+     */
+    private fun log(message: String, throwable: Throwable? = null) {
+        val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
+        val logLine = if (throwable != null) {
+            "[$timeStamp] $message\nИсключение: ${throwable.localizedMessage}\n${throwable.stackTraceToString()}"
+        } else {
+            "[$timeStamp] $message"
+        }
+
+        runOnUiThread {
+            tvLog.append("$logLine\n")
+        }
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val rootDir = Environment.getExternalStorageDirectory()
+                val mainFolder = File(rootDir, "ZBNreader")
+                if (!mainFolder.exists()) mainFolder.mkdirs()
+                val logFile = File(mainFolder, "zbn_app_log.txt")
+                logFile.appendText("$logLine\n----------------------------------------\n")
+            } catch (_: Exception) {}
+        }
     }
 
     private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
@@ -271,7 +306,9 @@ class MainActivity : AppCompatActivity() {
             if (!mainFolder.exists()) {
                 mainFolder.mkdirs()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            log("Ошибка создания рабочей директории", e)
+        }
     }
 
     private fun checkAndRequestStoragePermissions() {
@@ -282,7 +319,8 @@ class MainActivity : AppCompatActivity() {
                         data = Uri.parse("package:$packageName")
                     }
                     startActivity(intent)
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    log("Ошибка запроса разрешений через ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION", e)
                     startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
                 }
             } else {
@@ -299,10 +337,6 @@ class MainActivity : AppCompatActivity() {
                 createMainDirectory()
             }
         }
-    }
-
-    private fun log(message: String) {
-        runOnUiThread { tvLog.append("$message\n") }
     }
 
     private fun getAircraftFolder(tailNum: String): File {
@@ -328,7 +362,8 @@ class MainActivity : AppCompatActivity() {
             }
             val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
             File(getAircraftFolder(record.tailNum), fileName).exists()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log("Ошибка проверки существующего файла для включения №${record.number}", e)
             false
         }
     }
@@ -436,6 +471,8 @@ class MainActivity : AppCompatActivity() {
             prefs.getString("limit", "10")?.toIntOrNull() ?: 10
         }
 
+        log("Запуск сканирования. Скорость: $currentBaudRate бод, Лимит: $sessionLimit")
+
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
@@ -462,17 +499,19 @@ class MainActivity : AppCompatActivity() {
                 port.dtr = false
                 port.rts = false
 
+                log("Отправка ENQ (0x05)...")
                 port.write(byteArrayOf(0x05), 1000)
                 val ackBuf = ByteArray(1)
                 val readAck = port.read(ackBuf, 1000)
 
                 if (readAck == 0 || ackBuf[0] != 0x06.toByte()) {
-                    log("Ошибка: Ответ от ЗБН не получен (ожидался ACK 0x06)")
+                    log("Ошибка: Ответ от ЗБН не получен (Ожидался ACK 0x06, получено байт: $readAck)")
                     updateStatus("Статус: Сбой рукопожатия")
                     resetUi()
                     return@launch
                 }
 
+                log("Рукопожатие успешно (получен ACK 0x06). Чтение оглавления...")
                 val records = readCatalog(port, sessionLimit)
                 runOnUiThread {
                     flightList.clear()
@@ -482,14 +521,16 @@ class MainActivity : AppCompatActivity() {
 
                 if (records.isEmpty()) {
                     updateStatus("Статус: Оглавление пусто")
+                    log("Оглавление пустое или не удалось распарсить записи.")
                 } else {
                     updateStatus("Статус: Загружено ${records.size} включений")
+                    log("Успешно прочитано включений: ${records.size}")
                 }
             } catch (e: Exception) {
-                log("Ошибка: ${e.message}")
+                log("Сбой процесса чтения оглавления", e)
                 updateStatus("Статус: Сбой передачи")
             } finally {
-                try { port.close() } catch (_: Exception) {}
+                try { port.close() } catch (e: Exception) { log("Ошибка закрытия порта", e) }
                 resetUi()
             }
         }
@@ -498,24 +539,29 @@ class MainActivity : AppCompatActivity() {
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
         val flights = mutableListOf<FlightRecord>()
         port.write(byteArrayOf(0x4D.toByte()), 1000)
-        val buffer = ByteArray(16384) // Буфер 16 КБ для высокой скорости передачи
+        val buffer = ByteArray(16384) // 16 KB буфер
         var noDataCounter = 0
 
         while (flights.size < limit && noDataCounter < 3) {
-            val count = port.read(buffer, 1000)
-            if (count > 0) {
-                noDataCounter = 0
-                val parsedRecords = tocParser.parseBuffer(buffer, count)
-                flights.addAll(parsedRecords)
-                val currentCount = flights.size.coerceAtMost(limit)
-                val percent = ((currentCount * 100) / limit).coerceAtMost(100)
-                runOnUiThread {
-                    progressBar.progress = percent
-                    tvStatus.text = "Статус: Поиск включений ($currentCount из $limit)... $percent%"
+            try {
+                val count = port.read(buffer, 1000)
+                if (count > 0) {
+                    noDataCounter = 0
+                    val parsedRecords = tocParser.parseBuffer(buffer, count)
+                    flights.addAll(parsedRecords)
+                    val currentCount = flights.size.coerceAtMost(limit)
+                    val percent = ((currentCount * 100) / limit).coerceAtMost(100)
+                    runOnUiThread {
+                        progressBar.progress = percent
+                        tvStatus.text = "Статус: Поиск включений ($currentCount из $limit)... $percent%"
+                    }
+                    if (flights.size >= limit) break
+                } else {
+                    noDataCounter++
                 }
-                if (flights.size >= limit) break
-            } else {
-                noDataCounter++
+            } catch (e: Exception) {
+                log("Ошибка во время чтения оглавления из порта", e)
+                break
             }
         }
         return flights.take(limit)
@@ -545,10 +591,13 @@ class MainActivity : AppCompatActivity() {
             tvStatus.text = "Статус: Скачивание №${record.number}..."
         }
 
+        log("Начало копирования включения №${record.number}. Офсет: $startOffset, Размер: ${bytesToRead ?: "Неизвестен"}")
+
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
             if (drivers.isEmpty()) {
+                log("Ошибка скачивания: Конвертер USB не найден")
                 errorRecordNumbers.add(record.number)
                 runOnUiThread { updateTableUI(flightList) }
                 resetUi()
@@ -558,6 +607,7 @@ class MainActivity : AppCompatActivity() {
             val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
+                log("Ошибка скачивания: Нет прав USB")
                 errorRecordNumbers.add(record.number)
                 runOnUiThread { updateTableUI(flightList) }
                 resetUi()
@@ -592,7 +642,7 @@ class MainActivity : AppCompatActivity() {
                 outputFile = File(aircraftFolder, fileName)
 
                 val fos = FileOutputStream(outputFile)
-                val buffer = ByteArray(16384) // Буфер 16 КБ для высокой скорости передачи
+                val buffer = ByteArray(16384) // 16 KB буфер
                 var skippedBytes = 0L
                 var writtenBytes = 0L
                 var noDataCounter = 0
@@ -651,6 +701,7 @@ class MainActivity : AppCompatActivity() {
                 fos.close()
 
                 if (bytesToRead != null && writtenBytes < bytesToRead) {
+                    log("Ошибка: Передача прервана. Записано $writtenBytes из $bytesToRead байт.")
                     errorRecordNumbers.add(record.number)
                     updateStatus("Статус: Ошибка (Передача прервана)")
                     if (outputFile.exists()) outputFile.delete()
@@ -667,16 +718,18 @@ class MainActivity : AppCompatActivity() {
 
                     downloadedRecordNumbers.add(record.number)
                     errorRecordNumbers.remove(record.number)
+                    log("Успешно сохранен рейс №${record.flightNum} ($writtenBytes байт)")
                     updateStatus("Статус: Сохранен рейс №${record.flightNum}")
                 }
                 runOnUiThread { updateTableUI(flightList) }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                log("Исключение при скачивании включения №${record.number}", e)
                 errorRecordNumbers.add(record.number)
                 updateStatus("Статус: Ошибка сбоя связи")
                 outputFile?.let { if (it.exists()) it.delete() }
                 runOnUiThread { updateTableUI(flightList) }
             } finally {
-                try { port.close() } catch (_: Exception) {}
+                try { port.close() } catch (e: Exception) { log("Ошибка закрытия порта", e) }
                 resetUi()
             }
         }
@@ -689,10 +742,13 @@ class MainActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         tvStatus.text = "Статус: Чтение всего ЗБН..."
 
+        log("Запуск чтения полного дампа ЗБН...")
+
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
             if (drivers.isEmpty()) {
+                log("Ошибка: USB-RS422 конвертер не обнаружен")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
                 return@launch
@@ -701,6 +757,7 @@ class MainActivity : AppCompatActivity() {
             val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
+                log("Ошибка: Нет доступа к USB при дампе")
                 updateStatus("Статус: Ошибка доступа к USB")
                 resetUi()
                 return@launch
@@ -715,9 +772,10 @@ class MainActivity : AppCompatActivity() {
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                 downloadFullDump(port)
             } catch (e: Exception) {
+                log("Сбой при выполнении полного дампа ЗБН", e)
                 updateStatus("Статус: Ошибка скачивания ЗБН")
             } finally {
-                try { port.close() } catch (_: Exception) {}
+                try { port.close() } catch (e: Exception) { log("Ошибка закрытия порта", e) }
                 resetUi()
             }
         }
@@ -735,7 +793,7 @@ class MainActivity : AppCompatActivity() {
 
         try {
             fos = FileOutputStream(outputFile)
-            val buffer = ByteArray(16384) // Буфер 16 КБ для высокой скорости передачи
+            val buffer = ByteArray(16384) // 16 KB буфер
             var totalBytes = 0
             var noDataCounter = 0
 
@@ -759,6 +817,7 @@ class MainActivity : AppCompatActivity() {
             fos.close()
 
             if (totalBytes == 0) {
+                log("Ошибка дампа: Принято 0 байт данных")
                 updateStatus("Статус: Ошибка (Нет данных)")
                 if (outputFile.exists()) outputFile.delete()
                 return
@@ -774,8 +833,10 @@ class MainActivity : AppCompatActivity() {
             val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "128" }
 
             saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
+            log("Полный дамп успешен: Сохранено $totalBytes байт в $fileName")
             updateStatus("Статус: Весь ЗБН сохранен ($totalBytes Б)")
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log("Ошибка сохранения/чтения полного дампа", e)
             updateStatus("Статус: Ошибка записи/чтения ЗБН")
             try { fos?.close() } catch (_: Exception) {}
             if (outputFile.exists()) outputFile.delete()
@@ -826,8 +887,10 @@ class MainActivity : AppCompatActivity() {
                     workbook.write(fos)
                 }
                 workbook.close()
+                log("Таблица экспортирована в Excel: ${outputFile.absolutePath}")
                 updateStatus("Статус: Excel сохранен ($fileName)")
             } catch (e: Exception) {
+                log("Ошибка создания файла Excel", e)
                 updateStatus("Статус: Ошибка создания Excel")
             }
         }
@@ -840,22 +903,26 @@ class MainActivity : AppCompatActivity() {
         arinc: String,
         regSpeed: String
     ) {
-        val metaFile = File(folder, "$binFileName.meta")
-        val metaContent = """
-            ========================================
-            МЕТАДАННЫЕ ПОЛЁТНОЙ ИНФОРМАЦИИ
-            ========================================
-            Имя файла дампа: $binFileName
-            Дата скачивания: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}
-            
-            ПАРАМЕТРЫ СИСТЕМЫ:
-            • Тип системы регистрации: $sysType
-            • Протокол ARINC: $arinc
-            • Скорость регистрации: $regSpeed поз./с
-            • Длина субкадра: $regSpeed слов
-            ========================================
-        """.trimIndent()
-        metaFile.writeText(metaContent)
+        try {
+            val metaFile = File(folder, "$binFileName.meta")
+            val metaContent = """
+                ========================================
+                МЕТАДАННЫЕ ПОЛЁТНОЙ ИНФОРМАЦИИ
+                ========================================
+                Имя файла дампа: $binFileName
+                Дата скачивания: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}
+                
+                ПАРАМЕТРЫ СИСТЕМЫ:
+                • Тип системы регистрации: $sysType
+                • Протокол ARINC: $arinc
+                • Скорость регистрации: $regSpeed поз./с
+                • Длина субкадра: $regSpeed слов
+                ========================================
+            """.trimIndent()
+            metaFile.writeText(metaContent)
+        } catch (e: Exception) {
+            log("Ошибка сохранения метаданных .meta", e)
+        }
     }
 
     private fun updateStatus(text: String) {
