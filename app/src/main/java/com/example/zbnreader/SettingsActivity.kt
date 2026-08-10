@@ -182,7 +182,7 @@ class SettingsActivity : AppCompatActivity() {
 
             Toast.makeText(
                 this,
-                "Лог успешно сохранен в ZBNreader/$${destLogFile.name}",
+                "Лог успешно сохранен в ZBNreader/${destLogFile.name}",
                 Toast.LENGTH_LONG
             ).show()
 
