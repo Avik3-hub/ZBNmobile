@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(COLOR_BG)
         }
 
-        // 1. ВЕРХНЯЯ ПАНЕЛЬ (Исправлено отображение текста статуса)
+        // 1. ВЕРХНЯЯ ПАНЕЛЬ (Отображение текста статуса)
         val topPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -498,7 +498,7 @@ class MainActivity : AppCompatActivity() {
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
         val flights = mutableListOf<FlightRecord>()
         port.write(byteArrayOf(0x4D.toByte()), 1000)
-        val buffer = ByteArray(512)
+        val buffer = ByteArray(16384) // Буфер 16 КБ для высокой скорости передачи
         var noDataCounter = 0
 
         while (flights.size < limit && noDataCounter < 3) {
@@ -592,7 +592,7 @@ class MainActivity : AppCompatActivity() {
                 outputFile = File(aircraftFolder, fileName)
 
                 val fos = FileOutputStream(outputFile)
-                val buffer = ByteArray(512)
+                val buffer = ByteArray(16384) // Буфер 16 КБ для высокой скорости передачи
                 var skippedBytes = 0L
                 var writtenBytes = 0L
                 var noDataCounter = 0
@@ -735,7 +735,7 @@ class MainActivity : AppCompatActivity() {
 
         try {
             fos = FileOutputStream(outputFile)
-            val buffer = ByteArray(512)
+            val buffer = ByteArray(16384) // Буфер 16 КБ для высокой скорости передачи
             var totalBytes = 0
             var noDataCounter = 0
 
