@@ -150,48 +150,42 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun saveLogFile() {
-        try {
-            // Получаем исходный лог файл из папки приложения
-            val logDir = File(getExternalFilesDir(null), "ZBNreader")
-            val sourceLogFile = File(logDir, "zbn_app_log.txt")
+    try {
+        // Получаем исходный лог файл из папки приложения
+        val logDir = File(getExternalFilesDir(null), "ZBNreader")
+        val sourceLogFile = File(logDir, "zbn_app_log.txt")
 
-            if (!sourceLogFile.exists() || sourceLogFile.length() == 0L) {
-                Toast.makeText(this, "Файл лога пуст или еще не создан", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            // ИСПРАВЛЕНИЕ: Сохраняем в папку ZBNreader в корне телефона
-            val rootDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Для Android 11+ используем стандартный Documents/Downloads директорий
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            } else {
-                Environment.getExternalStorageDirectory()
-            }
-            
-            val zbsFolder = File(rootDir, "ZBNreader")
-            if (!zbsFolder.exists()) {
-                zbsFolder.mkdirs()
-            }
-
-            // Создаем имя файла с меткой времени
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val destLogFile = File(zbsFolder, "zbn_app_log_$timeStamp.txt")
-
-            // Копируем содержимое файла
-            sourceLogFile.copyTo(destLogFile, overwrite = true)
-
-            Toast.makeText(
-                this,
-                "Лог успешно сохранен в ZBNreader/${destLogFile.name}",
-                Toast.LENGTH_LONG
-            ).show()
-
-            android.util.Log.i("SettingsActivity", "Лог сохранен в: ${destLogFile.absolutePath}")
-        } catch (e: Exception) {
-            Toast.makeText(this, "Ошибка при сохранении лога: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            android.util.Log.e("SettingsActivity", "Ошибка сохранения лога", e)
+        if (!sourceLogFile.exists() || sourceLogFile.length() == 0L) {
+            Toast.makeText(this, "Файл лога пуст или еще не создан", Toast.LENGTH_SHORT).show()
+            return
         }
+
+        // Жестко указываем корень телефона (благо разрешение MANAGE_EXTERNAL_STORAGE получено)
+        val rootDir = Environment.getExternalStorageDirectory()
+        val zbsFolder = File(rootDir, "ZBNreader")
+        if (!zbsFolder.exists()) {
+            zbsFolder.mkdirs()
+        }
+
+        // Создаем имя файла с меткой времени
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val destLogFile = File(zbsFolder, "zbn_app_log_$timeStamp.txt")
+
+        // Копируем содержимое файла
+        sourceLogFile.copyTo(destLogFile, overwrite = true)
+
+        Toast.makeText(
+            this,
+            "Лог успешно сохранен в ZBNreader/${destLogFile.name}",
+            Toast.LENGTH_LONG
+        ).show()
+
+        android.util.Log.i("SettingsActivity", "Лог сохранен в: ${destLogFile.absolutePath}")
+    } catch (e: Exception) {
+        Toast.makeText(this, "Ошибка при сохранении лога: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        android.util.Log.e("SettingsActivity", "Ошибка сохранения лога", e)
     }
+}
 
     private fun createLabel(text: String) = TextView(this).apply {
         this.text = text
