@@ -18,6 +18,13 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
+import com.hoho.android.usbserial.driver.Ch340SerialDriver
+import com.hoho.android.usbserial.driver.Cp2102SerialDriver
+import com.hoho.android.usbserial.driver.FtdiSerialDriver
+import com.hoho.android.usbserial.driver.ProbeTable
+import com.hoho.android.usbserial.driver.ProlificSerialDriver
+import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import kotlinx.coroutines.Dispatchers
@@ -65,8 +72,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Глобальный перехватчик критических сбоев (чтобы логировать даже падения приложения)
+
+        // Глобальный перехватчик критических сбоев приложения
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             log("КРИТИЧЕСКИЙ СБОЙ ПРИЛОЖЕНИЯ в потоке ${thread.name}", throwable)
@@ -238,7 +245,56 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Расширенное логирование: выводит в UI и сохраняет в /ZBNreader/zbn_app_log.txt
+     * Создание кастомного пробера с расширенным списком поддерживаемых USB-RS422/RS232 чипов
+     */
+    private fun getCustomUsbProber(): UsbSerialProber {
+        val customTable = ProbeTable()
+
+        // FTDI чипы
+        customTable.addProduct(0x0403, 0x6001, FtdiSerialDriver::class.java)
+        customTable.addProduct(0x0403, 0x6010, FtdiSerialDriver::class.java)
+        customTable.addProduct(0x0403, 0x6014, FtdiSerialDriver::class.java)
+        customTable.addProduct(0x0403, 0x6015, FtdiSerialDriver::class.java)
+
+        // CH340 / CH341 чипы
+        customTable.addProduct(0x1a86, 0x7523, Ch340SerialDriver::class.java)
+        customTable.addProduct(0x1a86, 0x5523, Ch340SerialDriver::class.java)
+
+        // Silicon Labs CP210x чипы
+        customTable.addProduct(0x10c4, 0xea60, Cp2102SerialDriver::class.java)
+
+        // Prolific PL2303
+        customTable.addProduct(0x067b, 0x2303, ProlificSerialDriver::class.java)
+
+        // Стандартные CDC ACM драйверы
+        customTable.addProduct(0x03eb, 0x204b, CdcAcmSerialDriver::class.java)
+
+        return UsbSerialProber(customTable)
+    }
+
+    /**
+     * Диагностический поиск USB-устройств с фиксацией VID/PID в лог
+     */
+    private fun findUsbDriver(usbManager: UsbManager): UsbSerialDriver? {
+        val rawDeviceList = usbManager.deviceList
+        log("Физически подключено USB-устройств: ${rawDeviceList.size}")
+
+        for ((_, device) in rawDeviceList) {
+            val vidHex = String.format("0x%04X", device.vendorId)
+            val pidHex = String.format("0x%04X", device.productId)
+            log("-> Обнаружен USB: VID=$vidHex, PID=$pidHex, Name=${device.deviceName}")
+        }
+
+        var drivers = getCustomUsbProber().findAllDrivers(usbManager)
+        if (drivers.isEmpty()) {
+            drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        }
+
+        return drivers.firstOrNull()
+    }
+
+    /**
+     * Логирование в UI и параллельная запись в файл /ZBNreader/zbn_app_log.txt
      */
     private fun log(message: String, throwable: Throwable? = null) {
         val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
@@ -475,15 +531,15 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-            val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-            if (drivers.isEmpty()) {
-                log("Ошибка: USB-RS422 конвертер не обнаружен!")
+            val driver = findUsbDriver(usbManager)
+
+            if (driver == null) {
+                log("Ошибка: USB-RS422 конвертер не обнаружен или не опознан!")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
                 return@launch
             }
 
-            val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
                 log("Ошибка: Нет разрешения на использование USB!")
@@ -539,7 +595,7 @@ class MainActivity : AppCompatActivity() {
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
         val flights = mutableListOf<FlightRecord>()
         port.write(byteArrayOf(0x4D.toByte()), 1000)
-        val buffer = ByteArray(16384) // 16 KB буфер
+        val buffer = ByteArray(16384)
         var noDataCounter = 0
 
         while (flights.size < limit && noDataCounter < 3) {
@@ -595,8 +651,9 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-            val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-            if (drivers.isEmpty()) {
+            val driver = findUsbDriver(usbManager)
+
+            if (driver == null) {
                 log("Ошибка скачивания: Конвертер USB не найден")
                 errorRecordNumbers.add(record.number)
                 runOnUiThread { updateTableUI(flightList) }
@@ -604,7 +661,6 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
                 log("Ошибка скачивания: Нет прав USB")
@@ -642,7 +698,7 @@ class MainActivity : AppCompatActivity() {
                 outputFile = File(aircraftFolder, fileName)
 
                 val fos = FileOutputStream(outputFile)
-                val buffer = ByteArray(16384) // 16 KB буфер
+                val buffer = ByteArray(16384)
                 var skippedBytes = 0L
                 var writtenBytes = 0L
                 var noDataCounter = 0
@@ -746,15 +802,15 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-            val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-            if (drivers.isEmpty()) {
+            val driver = findUsbDriver(usbManager)
+
+            if (driver == null) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен")
                 updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
                 return@launch
             }
 
-            val driver = drivers[0]
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
                 log("Ошибка: Нет доступа к USB при дампе")
@@ -793,7 +849,7 @@ class MainActivity : AppCompatActivity() {
 
         try {
             fos = FileOutputStream(outputFile)
-            val buffer = ByteArray(16384) // 16 KB буфер
+            val buffer = ByteArray(16384)
             var totalBytes = 0
             var noDataCounter = 0
 
