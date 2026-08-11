@@ -541,7 +541,7 @@ class MainActivity : AppCompatActivity() {
                 port.rts = false
                 log("Отправка ENQ (0x05)...")
                 port.write(byteArrayOf(0x05), 1000)
-                val ackBuf = ByteArray(1)
+                val ackBuf = ByteArray(1024)
                 val readAck = port.read(ackBuf, 1000)
                 if (readAck == 0 || ackBuf[0] != 0x06.toByte()) {
                     log("Ошибка: Ответ от ЗБН не получен (Ожидался ACK 0x06, получено байт: $readAck)")
@@ -656,7 +656,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Исправление 2: Проверка ACK (0x06)
                 port.write(byteArrayOf(0x05), 1000)
-                val ack = ByteArray(1)
+                val ack = ByteArray(1024)
                 val readAck = port.read(ack, 1000)
                 if (readAck <= 0 || ack[0] != 0x06.toByte()) {
                     log("Ошибка скачивания: Накопитель не ответил на рукопожатие (ACK)")
@@ -819,7 +819,7 @@ class MainActivity : AppCompatActivity() {
     private fun downloadFullDump(port: UsbSerialPort) {
         // Проверка рукопожатия перед дампом
         port.write(byteArrayOf(0x05), 1000)
-        val ack = ByteArray(1)
+        val ack = ByteArray(1024)
         val readAck = port.read(ack, 1000)
         if (readAck <= 0 || ack[0] != 0x06.toByte()) {
             log("Ошибка дампа: ЗБН не ответил (ACK не получен)")
