@@ -271,7 +271,8 @@ class MainActivity : AppCompatActivity() {
         return drivers.firstOrNull()
     }
 
-    private fun log(message: String, throwable: Throwable? = null) {
+    // 1. Оставляем вашу основную функцию без изменений
+private fun log(message: String, throwable: Throwable? = null) {
     val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
     val logLine = if (throwable != null) {
         "[$timeStamp] $message\nИсключение: ${throwable.localizedMessage}\n${throwable.stackTraceToString()}"
@@ -279,10 +280,8 @@ class MainActivity : AppCompatActivity() {
         "[$timeStamp] $message"
     }
 
-    // 1. Всегда дублируем в системный Logcat (доступен в Android Studio во время отладки)
     android.util.Log.d("ZBN_DEBUG", logLine)
 
-    // 2. Вывод на экран в текстовое поле
     runOnUiThread {
         try {
             tvLog.append("$logLine\n")
@@ -291,25 +290,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 3. Запись в файл в фоновом потоке
     lifecycleScope.launch(Dispatchers.IO) {
         try {
-            // Используем изолированную папку приложения — она не требует разрешений 
-            // и никогда не блокируется системой на любых версиях Android.
             val mainFolder = File(getExternalFilesDir(null), "ZBNreader")
             if (!mainFolder.exists()) {
                 mainFolder.mkdirs()
             }
-            
             val logFile = File(mainFolder, "zbn_app_log.txt")
             logFile.appendText("$logLine\n----------------------------------------\n")
         } catch (e: Exception) {
-            // ВАЖНО: Больше не глушим ошибки! Если запись не удалась, 
-            // вы увидите причину в Logcat по тегу ZBN_DEBUG.
             android.util.Log.e("ZBN_DEBUG", "Ошибка записи лога на диск: ${e.localizedMessage}")
         }
     }
 }
+
+// 2. Добавляем рядом функцию форматирования байтов, которая вызывает ваш log(...)
+private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
+    if (length <= 0) {
+        log("[$tag] Получено байт: 0 (таймаут или пустой буфер)")
+        return
+    }
+    // Формируем HEX-представление (например: 06 00 FF 3A)
+    val hex = bytes.take(length).joinToString(" ") { String.format("%02X", it) }
+    // Формируем ASCII-представление для читаемых символов
+    val ascii = bytes.take(length).map { 
+        if (it in 32..126) it.toInt().toChar() else '.' 
+    }.joinToString("")
+    
+    // Передаем готовый красивый строковый результат в вашу функцию log
+    log("[$tag] Байт: $length | HEX: [$hex] | ASCII: [$ascii]")
+}
+
 
 
     private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
