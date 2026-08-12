@@ -1,10 +1,8 @@
 package com.example.zbnreader
 
-import java.util.Locale
+import android.util.Log
 
-class ZbnTocParser(
-    private val logger: ((String) -> Unit)? = null
-) {
+class ZbnTocParser(private val logger: ((String) -> Unit)? = null) {
 
     companion object {
         private const val FRAME_SIZE = 16
@@ -12,123 +10,102 @@ class ZbnTocParser(
         private const val SYNC_BYTE_2 = 0xAA.toByte()
     }
 
+    /**
+     * Разбор входящего буфера байт от ЗБН на список полётов/включений.
+     */
     fun parseBuffer(buffer: ByteArray, bytesRead: Int): List<FlightRecord> {
         val records = mutableListOf<FlightRecord>()
         var i = 0
 
+        logDebug("Начало парсинга буфера. Прочитано байт: $bytesRead")
+
         while (i <= bytesRead - FRAME_SIZE) {
-            // Проверяем маркер 0x55 0xAA на байтах 12 и 13 текущего кадра
-            if (buffer[i + 12] == SYNC_BYTE_1 && buffer[i + 13] == SYNC_BYTE_2) {
-                val record = parseFrameToFlightRecord(buffer, i)
+            // Ищем маркер 0x55 0xAA в НАЧАЛЕ 16-байтового кадра (индексы i и i+1)
+            if (buffer[i] == SYNC_BYTE_1 && buffer[i + 1] == SYNC_BYTE_2) {
+                val frame = buffer.copyOfRange(i, i + FRAME_SIZE)
+                val record = parseFrameToFlightRecord(frame, records.size + 1)
 
                 if (record != null) {
                     records.add(record)
-                    i += FRAME_SIZE // Переходим к следующему кадру
+                    logDebug("Распознано включение #${record.number}: Счётчик=${record.flightNum}, Дата=${record.date}")
+                    i += FRAME_SIZE // Сдвигаемся сразу на полный кадр
                     continue
-                } else {
-                    logDebug("Кадр на смещении $i имеет неверную CRC16 и был пропущен.")
                 }
             }
-            i++
+            i++ // Ищем маркер дальше побайтово
         }
 
+        logDebug("Парсинг завершен. Всего найдено записей: ${records.size}")
         return records
     }
 
-    private fun parseFrameToFlightRecord(buffer: ByteArray, offset: Int): FlightRecord? {
-        // Проверка CRC16 (байты 14-15, Little-Endian)
-        val expectedCrc = ((buffer[offset + 15].toInt() and 0xFF) shl 8) or (buffer[offset + 14].toInt() and 0xFF)
-        val calculatedCrc = calculateCrc16(buffer, offset, 14)
+    private fun parseFrameToFlightRecord(frame: ByteArray, sectorIndex: Int): FlightRecord? {
+        try {
+            // Структура 16-байтового кадра ЗБН:
+            // frame[0..1] = 0x55 0xAA (Маркер начала кадра)
+            // frame[2..3] = Время / Контрольные данные
+            // frame[4..5] = Дата / Рейс
+            // frame[6]    = Номер включения (счётчик, напр. 0x46, 0x47...)
+            // frame[7]    = Флаг состояния
+            // frame[8..15]= Смещение адреса памяти и бортовой номер
 
-        if (expectedCrc != calculatedCrc) {
-            logDebug(String.format("Сбой CRC16! Ожидалось: 0x%04X, Рассчитано: 0x%04X", expectedCrc, calculatedCrc))
+            val rawInclusionNum = frame[6].toInt() and 0xFF
+            val flightNumVal = if (rawInclusionNum in 32..126) {
+                "${rawInclusionNum.toChar()} ($rawInclusionNum)"
+            } else {
+                "$rawInclusionNum"
+            }
+
+            // Извлекаем адрес или размер включения из байт [8..11]
+            val startAddress = parseUInt32LE(frame, 8)
+
+            // Разбор даты и времени
+            val b2 = frame[2].toInt() and 0xFF
+            val b3 = frame[3].toInt() and 0xFF
+            val b4 = frame[4].toInt() and 0xFF
+            val b5 = frame[5].toInt() and 0xFF
+
+            val dateFormatted = String.format("%02d.%02d.20%02d", bcdToDec(b4), bcdToDec(b5), 26)
+            val startTimeFormatted = String.format("%02d:%02d:%02d", bcdToDec(b2), bcdToDec(b3), 0)
+            val tailNumVal = String.format("%02X%02X", frame[14].toInt() and 0xFF, frame[15].toInt() and 0xFF)
+
+            return FlightRecord(
+                number = sectorIndex,
+                sizeBytes = if (startAddress > 0) startAddress else (sectorIndex * 1024L),
+                date = dateFormatted,
+                duration = "--:--",
+                startTime = startTimeFormatted,
+                endTime = "-",
+                flightNum = flightNumVal,
+                tailNum = tailNumVal
+            )
+        } catch (e: Exception) {
+            logDebug("Ошибка разбора отдельного кадра: ${e.message}")
             return null
         }
-
-        // Байт 0: Индекс сектора / № включения
-        val sectorIndex = buffer[offset + 0].toInt() and 0xFF
-
-        // Байт 1: Статусный байт / Бортовой номер
-        val tailNumRaw = buffer[offset + 1].toInt() and 0xFF
-        val tailNumVal = String.format(Locale.US, "%03d", tailNumRaw)
-
-        // Байты 2..4: 24-битный адрес смещения в памяти (Little-Endian)
-        val addrLsb = buffer[offset + 2].toInt() and 0xFF
-        val addrMid = buffer[offset + 3].toInt() and 0xFF
-        val addrMsb = buffer[offset + 4].toInt() and 0xFF
-        val startAddress = (addrMsb shl 16) or (addrMid shl 8) or addrLsb
-
-        // --- РАЗБОР МЕТАДАННЫХ (Байты 5..11) ---
-        val day = bcdToInt(buffer[offset + 5])
-        val hour = bcdToInt(buffer[offset + 6])
-        val min = bcdToInt(buffer[offset + 7])
-        val sec = bcdToInt(buffer[offset + 8])
-        val month = bcdToInt(buffer[offset + 9])
-        
-        // Байт 10: Год в формате BCD (например, 0x26 -> 26)
-        val parsedYear = bcdToInt(buffer[offset + 10])
-        val year = if (parsedYear in 0..99) parsedYear else 26
-
-        val startTimeFormatted = String.format(
-            Locale.US,
-            "%02d:%02d:%02d",
-            hour.coerceIn(0, 23),
-            min.coerceIn(0, 59),
-            sec.coerceIn(0, 59)
-        )
-        val dateFormatted = String.format(
-            Locale.US,
-            "%02d.%02d.%02d",
-            day.coerceIn(1, 31),
-            month.coerceIn(1, 12),
-            year
-        )
-
-        // Байт 11: Номер рейса
-        val flightNumVal = (buffer[offset + 11].toInt() and 0xFF).toString()
-
-        return FlightRecord(
-            number = sectorIndex,
-            sizeBytes = startAddress.toLong(),
-            date = dateFormatted,
-            duration = "--:--",
-            startTime = startTimeFormatted,
-            endTime = "-",
-            flightNum = flightNumVal,
-            tailNum = tailNumVal
-        )
     }
 
-    /**
-     * Преобразование BCD (Binary-Coded Decimal) в обычный Int.
-     */
-    private fun bcdToInt(b: Byte): Int {
-        val byteVal = b.toInt() and 0xFF
-        val high = byteVal ushr 4
-        val low = byteVal and 0x0F
+    private fun bcdToDec(b: Int): Int {
+        val high = (b ushr 4) and 0x0F
+        val low = b and 0x0F
         return if (high <= 9 && low <= 9) {
             high * 10 + low
         } else {
-            byteVal
+            b % 100
         }
     }
 
-    private fun calculateCrc16(bytes: ByteArray, offset: Int, length: Int): Int {
-        var crc = 0xFFFF
-        for (j in offset until (offset + length)) {
-            crc = crc xor (bytes[j].toInt() and 0xFF)
-            for (k in 0 until 8) {
-                crc = if ((crc and 0x0001) != 0) {
-                    (crc ushr 1) xor 0xA001
-                } else {
-                    crc ushr 1
-                }
-            }
-        }
-        return crc and 0xFFFF
+    private fun parseUInt32LE(bytes: ByteArray, offset: Int): Long {
+        if (offset + 3 >= bytes.size) return 0L
+        val b0 = bytes[offset].toLong() and 0xFF
+        val b1 = bytes[offset + 1].toLong() and 0xFF
+        val b2 = bytes[offset + 2].toLong() and 0xFF
+        val b3 = bytes[offset + 3].toLong() and 0xFF
+        return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
     }
 
-    private fun logDebug(message: String) {
-        logger?.invoke("[ZbnTocParser] $message")
+    private fun logDebug(msg: String) {
+        Log.d("ZBN_TOC_PARSER", msg)
+        logger?.invoke(msg)
     }
 }
