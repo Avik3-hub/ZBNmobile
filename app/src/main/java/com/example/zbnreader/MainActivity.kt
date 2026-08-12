@@ -564,7 +564,6 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
 
             // 3. Вывод подробных данных в лог (вызовет логирование байтов)
             logBytes("RX_ACK", ackBuf, readAck)
-
             // 4. Проверка результата
             if (readAck == 0) {
                 log("Ошибка: Ответ от ЗБН не получен (таймаут, 0 байт)")
@@ -617,6 +616,7 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
         while (flights.size < limit && noDataCounter < 3) {
             try {
                 val count = port.read(buffer, 1000)
+                logBytes("RX_TOC", buffer, count)
                 if (count > 0) {
                     noDataCounter = 0
                     val parsedRecords = tocParser.parseBuffer(buffer, count)
