@@ -32,43 +32,45 @@ class ZbnTocParser(private val logger: ((String) -> Unit)? = null) {
         return records
     }
 
-    private fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
-        try {
-            // 1. Номер включения (байты 6..7, Little-Endian)
-            val sessionNum = ((frame[7].toInt() and 0xFF) shl 8) or (frame[6].toInt() and 0xFF)
+    fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
+    if (frame.size < 16) return null
 
-            // 2. Бортовой номер и номер рейса (байты 4..5)
-            val tailNumVal = String.format("%02X%02X", frame[4], frame[5])
-            val flightNumVal = sessionNum.toString()
+    // 1. Номер включения (2 байта, Big-Endian)
+    val flightNum = ((frame[0].toInt() and 0xFF) shl 8) or (frame[1].toInt() and 0xFF)
 
-            // 3. Размер / Адрес (байты 8..11, UInt32 Little-Endian)
-            val sizeBytes = parseUInt32LE(frame, 8)
+    // 2. Размер записи (4 байта)
+    val size = ((frame[2].toLong() and 0xFF) shl 24) or
+               ((frame[3].toLong() and 0xFF) shl 16) or
+               ((frame[4].toLong() and 0xFF) shl 8) or
+               (frame[5].toLong() and 0xFF)
 
-            // 4. Время начала (байты 12..13, BCD ЧЧ:ММ)
-            val hour = bcdToDec(frame[12].toInt() and 0xFF)
-            val minute = bcdToDec(frame[13].toInt() and 0xFF)
-            val startTimeFormatted = String.format("%02d:%02d", hour, minute)
+    // 3. Дата (3 байта BCD: [Год, Месяц, День])
+    val year = bcdToInt(frame[6])
+    val month = bcdToInt(frame[7])
+    val day = bcdToInt(frame[8])
+    val dateStr = String.format("%02d.%02d.20%02d", day, month, year)
 
-            // 5. Дата (байты 14..15, BCD ДД.ММ)
-            val day = bcdToDec(frame[14].toInt() and 0xFF)
-            val month = bcdToDec(frame[15].toInt() and 0xFF)
-            val dateFormatted = String.format("%02d.%02d.2026", day, month)
+    // 4. Время (3 байта BCD: [Часы, Минуты, Секунды])
+    val hour = bcdToInt(frame[9])
+    val min = bcdToInt(frame[10])
+    val sec = bcdToInt(frame[11])
+    val timeStr = String.format("%02d:%02d:%02d", hour, min, sec)
 
-            return FlightRecord(
-                number = sessionNum,
-                sizeBytes = if (sizeBytes > 0) sizeBytes else 65536L,
-                date = dateFormatted,
-                duration = "--:--",
-                startTime = startTimeFormatted,
-                endTime = "-",
-                flightNum = flightNumVal,
-                tailNum = tailNumVal
-            )
-        } catch (e: Exception) {
-            logDebug("Ошибка разбора кадра: ${e.message}")
-            return null
-        }
-    }
+    // 5. Рейс (2 байта BCD, например [0x93, 0x35] -> "9335")
+    val flightName = bcdToString(byteArrayOf(frame[12], frame[13]))
+
+    // 6. Борт (3 байта BCD, например [0x02, 0x22, 0x71] -> "22271")
+    val tailNumber = bcdToString(byteArrayOf(frame[14], frame[15]))
+
+    return FlightRecord(
+        number = flightNum,
+        size = size,
+        date = dateStr,
+        time = timeStr,
+        flight = flightName,
+        tail = tailNumber
+    )
+}
 
     private fun bcdToDec(b: Int): Int {
         val high = (b ushr 4) and 0x0F
@@ -79,6 +81,23 @@ class ZbnTocParser(private val logger: ((String) -> Unit)? = null) {
             b % 100
         }
     }
+// Преобразование одного BCD-байта (например, 0x93) в десятичное число (93)
+fun bcdToInt(b: Byte): Int {
+    val high = (b.toInt() shr 4) and 0x0F
+    val low = b.toInt() and 0x0F
+    return high * 10 + low
+}
+
+// Преобразование BCD-байтов в строку с сохранением ведущих нулей
+fun bcdToString(bytes: ByteArray): String {
+    val sb = StringBuilder()
+    for (b in bytes) {
+        val high = (b.toInt() shr 4) and 0x0F
+        val low = b.toInt() and 0x0F
+        sb.append(high).append(low)
+    }
+    return sb.toString().trimStart('0')
+}
 
     private fun parseUInt32LE(bytes: ByteArray, offset: Int): Long {
         if (offset + 3 >= bytes.size) return 0L
