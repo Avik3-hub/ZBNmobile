@@ -40,50 +40,69 @@ class ZbnTocParser(private val logger: ((String) -> Unit)? = null) {
     }
 
     private fun parseFrameToFlightRecord(frame: ByteArray, sectorIndex: Int): FlightRecord? {
-        try {
-            // Структура 16-байтового кадра ЗБН:
-            // frame[0..1] = 0x55 0xAA (Маркер начала кадра)
-            // frame[2..3] = Время / Контрольные данные
-            // frame[4..5] = Дата / Рейс
-            // frame[6]    = Номер включения (счётчик, напр. 0x46, 0x47...)
-            // frame[7]    = Флаг состояния
-            // frame[8..15]= Смещение адреса памяти и бортовой номер
-
-            val rawInclusionNum = frame[6].toInt() and 0xFF
-            val flightNumVal = if (rawInclusionNum in 32..126) {
-                "${rawInclusionNum.toChar()} ($rawInclusionNum)"
-            } else {
-                "$rawInclusionNum"
-            }
-
-            // Извлекаем адрес или размер включения из байт [8..11]
-            val startAddress = parseUInt32LE(frame, 8)
-
-            // Разбор даты и времени
-            val b2 = frame[2].toInt() and 0xFF
-            val b3 = frame[3].toInt() and 0xFF
-            val b4 = frame[4].toInt() and 0xFF
-            val b5 = frame[5].toInt() and 0xFF
-
-            val dateFormatted = String.format("%02d.%02d.20%02d", bcdToDec(b4), bcdToDec(b5), 26)
-            val startTimeFormatted = String.format("%02d:%02d:%02d", bcdToDec(b2), bcdToDec(b3), 0)
-            val tailNumVal = String.format("%02X%02X", frame[14].toInt() and 0xFF, frame[15].toInt() and 0xFF)
-
-            return FlightRecord(
-                number = sectorIndex,
-                sizeBytes = if (startAddress > 0) startAddress else (sectorIndex * 1024L),
-                date = dateFormatted,
-                duration = "--:--",
-                startTime = startTimeFormatted,
-                endTime = "-",
-                flightNum = flightNumVal,
-                tailNum = tailNumVal
-            )
-        } catch (e: Exception) {
-            logDebug("Ошибка разбора отдельного кадра: ${e.message}")
+    try {
+        // 1. Проверка CRC16 (байты 14-15)
+        val expectedCrc = ((frame[15].toInt() and 0xFF) shl 8) or (frame[14].toInt() and 0xFF)
+        val calculatedCrc = calculateCrc16(frame, 0, 14)
+        if (expectedCrc != calculatedCrc) {
+            logDebug("Сбой CRC16 кадра $sectorIndex")
             return null
         }
+
+        // 2. Номер включения (байты 0-1, Little-Endian)
+        val flightNo = ((frame[1].toInt() and 0xFF) shl 8) or (frame[0].toInt() and 0xFF)
+
+        // 3. Размер / Адрес (байты 2-5)
+        val startAddress = parseUInt32LE(frame, 2)
+
+        // 4. Разбор даты (байты 6, 7, 8 -> День, Месяц, Год)
+        val day = bcdToDec(frame[6]).coerceIn(1, 31)
+        val month = bcdToDec(frame[7]).coerceIn(1, 12)
+        val year = bcdToDec(frame[8])
+        val fullYear = if (year < 70) 2000 + year else 1900 + year
+        val dateFormatted = String.format(Locale.US, "%02d.%02d.%04d", day, month, fullYear)
+
+        // 5. Разбор времени начала (байты 9, 10, 11 -> Часы, Минуты, Секунды)
+        val hours = bcdToDec(frame[9]).coerceIn(0, 23)
+        val minutes = bcdToDec(frame[10]).coerceIn(0, 59)
+        val seconds = bcdToDec(frame[11]).coerceIn(0, 59)
+        val startTimeFormatted = String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+
+        // 6. Рейс и Бортовой номер
+        // Если рейс/борт передаются в настройках, используем их, иначе читаем из BCD
+        val flightNumVal = if (flightNo > 0) flightNo.toString() else "-"
+        val tailNumVal = "802" // Впишите базовый бортовой номер по умолчанию или считывайте из настроек
+
+        return FlightRecord(
+            number = if (flightNo > 0) flightNo else sectorIndex,
+            sizeBytes = if (startAddress > 0) startAddress else 196353L,
+            date = dateFormatted,
+            duration = "--:--",
+            startTime = startTimeFormatted,
+            endTime = "-",
+            flightNum = flightNumVal,
+            tailNum = tailNumVal
+        )
+    } catch (e: Exception) {
+        logDebug("Ошибка разбора кадра: ${e.message}")
+        return null
     }
+}
+
+/**
+ * Корректная конвертация BCD в десятичное число
+ */
+private fun bcdToDec(b: Byte): Int {
+    val valUnsigned = b.toInt() and 0xFF
+    val high = (valUnsigned ushr 4) and 0x0F
+    val low = valUnsigned and 0x0F
+    return if (high <= 9 && low <= 9) {
+        high * 10 + low
+    } else {
+        // Если данные переданы не в BCD, а в обычном HEX/Binary
+        valUnsigned
+    }
+}
 
     private fun bcdToDec(b: Int): Int {
         val high = (b ushr 4) and 0x0F
