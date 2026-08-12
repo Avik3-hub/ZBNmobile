@@ -615,7 +615,7 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
         var noDataCounter = 0
         while (flights.size < limit && noDataCounter < 3) {
             try {
-                val count = port.read(buffer, 1000)
+                val count = port.read(buffer, 3000)
                 logBytes("RX_TOC", buffer, count)
                 if (count > 0) {
                     noDataCounter = 0
