@@ -14,45 +14,49 @@ class ZbnTocParser(private val logger: ((String) -> Unit)? = null) {
         val records = mutableListOf<FlightRecord>()
         var i = 0
 
+        // Ищем маркер 0x55 0xAA как НАЧАЛО кадра (байты 0 и 1)
         while (i <= bytesRead - FRAME_SIZE) {
-            // Проверяем маркер 0x55 0xAA в начале кадра (байты 0 и 1)
             if (buffer[i] == SYNC_BYTE_1 && buffer[i + 1] == SYNC_BYTE_2) {
                 val frame = buffer.copyOfRange(i, i + FRAME_SIZE)
-                val record = parseFrameToFlightRecord(frame, records.size + 1)
+                val record = parseFrameToFlightRecord(frame)
 
                 if (record != null) {
                     records.add(record)
-                    i += FRAME_SIZE
+                    i += FRAME_SIZE // Кадр разобран — переходим к следующему
                     continue
                 }
             }
-            i++
+            i++ // Сдвиг скользящего окна при сбое синхронизации
         }
 
         return records
     }
 
-    private fun parseFrameToFlightRecord(frame: ByteArray, sectorIndex: Int): FlightRecord? {
+    private fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
         try {
-            val startAddress = parseUInt32LE(frame, 2)
+            // 1. Номер включения (байты 6..7, Little-Endian)
+            val sessionNum = ((frame[7].toInt() and 0xFF) shl 8) or (frame[6].toInt() and 0xFF)
 
-            val year = bcdToDec(frame[6].toInt())
-            val month = bcdToDec(frame[7].toInt())
-            val day = bcdToDec(frame[8].toInt())
+            // 2. Бортовой номер и номер рейса (байты 4..5)
+            val tailNumVal = String.format("%02X%02X", frame[4], frame[5])
+            val flightNumVal = sessionNum.toString()
 
-            val hour = bcdToDec(frame[9].toInt())
-            val minute = bcdToDec(frame[10].toInt())
-            val second = bcdToDec(frame[11].toInt())
+            // 3. Размер / Адрес (байты 8..11, UInt32 Little-Endian)
+            val sizeBytes = parseUInt32LE(frame, 8)
 
-            val flightNumVal = (frame[12].toInt() and 0xFF).toString()
-            val tailNumVal = (frame[13].toInt() and 0xFF).toString()
+            // 4. Время начала (байты 12..13, BCD ЧЧ:ММ)
+            val hour = bcdToDec(frame[12].toInt() and 0xFF)
+            val minute = bcdToDec(frame[13].toInt() and 0xFF)
+            val startTimeFormatted = String.format("%02d:%02d", hour, minute)
 
-            val dateFormatted = String.format("%02d.%02d.20%02d", day, month, year)
-            val startTimeFormatted = String.format("%02d:%02d:%02d", hour, minute, second)
+            // 5. Дата (байты 14..15, BCD ДД.ММ)
+            val day = bcdToDec(frame[14].toInt() and 0xFF)
+            val month = bcdToDec(frame[15].toInt() and 0xFF)
+            val dateFormatted = String.format("%02d.%02d.2026", day, month)
 
             return FlightRecord(
-                number = sectorIndex,
-                sizeBytes = if (startAddress > 0) startAddress else (sectorIndex * 1024L),
+                number = sessionNum,
+                sizeBytes = if (sizeBytes > 0) sizeBytes else 65536L,
                 date = dateFormatted,
                 duration = "--:--",
                 startTime = startTimeFormatted,
@@ -61,7 +65,7 @@ class ZbnTocParser(private val logger: ((String) -> Unit)? = null) {
                 tailNum = tailNumVal
             )
         } catch (e: Exception) {
-            logDebug("Ошибка разбора отдельного кадра: ${e.message}")
+            logDebug("Ошибка разбора кадра: ${e.message}")
             return null
         }
     }
