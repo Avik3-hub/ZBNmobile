@@ -510,79 +510,104 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
     }
 
     private fun startReading() {
-        setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
-        setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
-        progressBar.isIndeterminate = false
-        progressBar.max = 100
-        progressBar.progress = 0
-        progressBar.visibility = View.VISIBLE
-        tvLog.text = ""
-        tvStatus.text = "Статус: Подключение..."
-        val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-        
-        val currentBaudRate = prefs.getInt("baud_rate", 921600)
-        
-        val sessionLimit = try {
-            prefs.getInt("limit", 6)
-        } catch (_: Exception) {
-            prefs.getString("limit", "6")?.toIntOrNull() ?: 6
+    setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
+    setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+    progressBar.isIndeterminate = false
+    progressBar.max = 100
+    progressBar.progress = 0
+    progressBar.visibility = View.VISIBLE
+    tvLog.text = ""
+    tvStatus.text = "Статус: Подключение..."
+    val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+    
+    val currentBaudRate = prefs.getInt("baud_rate", 921600)
+    
+    val sessionLimit = try {
+        prefs.getInt("limit", 6)
+    } catch (_: Exception) {
+        prefs.getString("limit", "6")?.toIntOrNull() ?: 6
+    }
+    log("Запуск сканирования. Скорость: $currentBaudRate бод, Лимит: $sessionLimit")
+    lifecycleScope.launch(Dispatchers.IO) {
+        val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+        val driver = findUsbDriver(usbManager)
+        if (driver == null) {
+            log("Ошибка: USB-RS422 конвертер не обнаружен или не опознан!")
+            updateStatus("Статус: Ошибка (Нет адаптера)")
+            resetUi()
+            return@launch
         }
-        log("Запуск сканирования. Скорость: $currentBaudRate бод, Лимит: $sessionLimit")
-        lifecycleScope.launch(Dispatchers.IO) {
-            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-            val driver = findUsbDriver(usbManager)
-            if (driver == null) {
-                log("Ошибка: USB-RS422 конвертер не обнаружен или не опознан!")
-                updateStatus("Статус: Ошибка (Нет адаптера)")
+        val connection = usbManager.openDevice(driver.device)
+        if (connection == null) {
+            log("Ошибка: Нет разрешения на использование USB!")
+            updateStatus("Статус: Ошибка доступа к USB")
+            resetUi()
+            return@launch
+        }
+        val port = driver.ports[0]
+        try {
+            port.open(connection)
+            port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+            port.dtr = false
+            port.rts = false
+
+            // ⬇️ ⬇️ ⬇️ ВСТАВЛЕННЫЙ БЛОК РУКОПОЖАТИЯ С ПОДРОБНЫМ ЛОГОМ ⬇️ ⬇️ ⬇️
+            
+            // 1. Отправка запроса ENQ
+            val enqPacket = byteArrayOf(0x05)
+            port.write(enqPacket, 1000)
+            log("Отправка ENQ (0x05)...")
+
+            // 2. Чтение ответа с буфером с запасом для FTDI
+            val ackBuf = ByteArray(1024)
+            val readAck = port.read(ackBuf, 1000)
+
+            // 3. Вывод подробных данных в лог (вызовет логирование байтов)
+            logBytes("RX_ACK", ackBuf, readAck)
+
+            // 4. Проверка результата
+            if (readAck == 0) {
+                log("Ошибка: Ответ от ЗБН не получен (таймаут, 0 байт)")
+                updateStatus("Статус: Сбой рукопожатия")
                 resetUi()
                 return@launch
-            }
-            val connection = usbManager.openDevice(driver.device)
-            if (connection == null) {
-                log("Ошибка: Нет разрешения на использование USB!")
-                updateStatus("Статус: Ошибка доступа к USB")
-                resetUi()
-                return@launch
-            }
-            val port = driver.ports[0]
-            try {
-                port.open(connection)
-                port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                port.dtr = false
-                port.rts = false
-                log("Отправка ENQ (0x05)...")
-                port.write(byteArrayOf(0x05), 1000)
-                val ackBuf = ByteArray(1024)
-                val readAck = port.read(ackBuf, 1000)
-                if (readAck == 0 || ackBuf[0] != 0x06.toByte()) {
-                    log("Ошибка: Ответ от ЗБН не получен (Ожидался ACK 0x06, получено байт: $readAck)")
+            } else {
+                val responseByte = ackBuf[0] 
+                if (responseByte == 0x06.toByte()) {
+                    log("Успех: Получен ACK (0x06). Чтение оглавления...")
+                } else {
+                    log("Ошибка: Неверный ответ. Ожидался 0x06, получено: 0x${String.format("%02X", responseByte)}")
                     updateStatus("Статус: Сбой рукопожатия")
                     resetUi()
                     return@launch
                 }
-                log("Рукопожатие успешно (получен ACK 0x06). Чтение оглавления...")
-                val records = readCatalog(port, sessionLimit)
-                runOnUiThread {
-                    flightList.clear()
-                    flightList.addAll(records)
-                    updateTableUI(flightList)
-                }
-                if (records.isEmpty()) {
-                    updateStatus("Статус: Оглавление пусто")
-                    log("Оглавление пустое или не удалось распарсить записи.")
-                } else {
-                    updateStatus("Статус: Загружено ${records.size} включений")
-                    log("Успешно прочитано включений: ${records.size}")
-                }
-            } catch (e: Exception) {
-                log("Сбой процесса чтения оглавления", e)
-                updateStatus("Статус: Сбой передачи")
-            } finally {
-                try { port.close() } catch (e: Exception) { log("Ошибка закрытия порта", e) }
-                resetUi()
             }
+
+            // ⬆️ ⬆️ ⬆️ КОНЕЦ БЛОКА РУКОПОЖАТИЯ ⬆️ ⬆️ ⬆️
+
+            val records = readCatalog(port, sessionLimit)
+            runOnUiThread {
+                flightList.clear()
+                flightList.addAll(records)
+                updateTableUI(flightList)
+            }
+            if (records.isEmpty()) {
+                updateStatus("Статус: Оглавление пусто")
+                log("Оглавление пустое или не удалось распарсить записи.")
+            } else {
+                updateStatus("Статус: Загружено ${records.size} включений")
+                log("Успешно прочитано включений: ${records.size}")
+            }
+        } catch (e: Exception) {
+            log("Сбой процесса чтения оглавления", e)
+            updateStatus("Статус: Сбой передачи")
+        } finally {
+            try { port.close() } catch (e: Exception) { log("Ошибка закрытия порта", e) }
+            resetUi()
         }
     }
+}
+
 
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
         val flights = mutableListOf<FlightRecord>()
