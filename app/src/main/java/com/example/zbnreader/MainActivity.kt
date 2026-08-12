@@ -609,35 +609,48 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
 
 
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
-        val flights = mutableListOf<FlightRecord>()
-        port.write(byteArrayOf(0x4D.toByte()), 1000)
-        val buffer = ByteArray(16384)
-        var noDataCounter = 0
-        while (flights.size < limit && noDataCounter < 3) {
-            try {
-                val count = port.read(buffer, 5000)
-                logBytes("RX_TOC", buffer, count)
-                if (count > 0) {
-                    noDataCounter = 0
-                    val parsedRecords = tocParser.parseBuffer(buffer, count)
-                    flights.addAll(parsedRecords)
-                    val currentCount = flights.size.coerceAtMost(limit)
-                    val percent = ((currentCount * 100) / limit).coerceAtMost(100)
-                    runOnUiThread {
-                        progressBar.progress = percent
-                        tvStatus.text = "Статус: Поиск включений ($currentCount из $limit)... $percent%"
-                    }
-                    if (flights.size >= limit) break
-                } else {
-                    noDataCounter++
+    val allRecords = mutableListOf<FlightRecord>()
+    
+    // 1. Отправляем команду запроса оглавления ('M' / 0x4D)
+    port.write(byteArrayOf(0x4D.toByte()), 1000)
+    
+    val buffer = ByteArray(16384)
+    var noDataCounter = 0
+
+    // 2. Вычитываем ВСЁ оглавление из накопителя до упора (пока не перестанут идти данные)
+    while (noDataCounter < 3) {
+        try {
+            val count = port.read(buffer, 5000)
+            logBytes("RX_TOC", buffer, count)
+
+            if (count > 0) {
+                noDataCounter = 0
+                val parsedRecords = tocParser.parseBuffer(buffer, count)
+                allRecords.addAll(parsedRecords)
+
+                // Обновляем статус: показываем, сколько всего полётов найдено в памяти
+                runOnUiThread {
+                    tvStatus.text = "Статус: Найдено включений в ЗБН: ${allRecords.size}..."
                 }
-            } catch (e: Exception) {
-                log("Ошибка во время чтения оглавления из порта", e)
-                break
+            } else {
+                noDataCounter++
             }
+        } catch (e: Exception) {
+            log("Ошибка во время чтения оглавления", e)
+            break
         }
-        return flights.take(limit)
     }
+
+    log("Вычитывание завершено. Всего записей в ЗБН: ${allRecords.size}")
+
+    // 3. Отбираем N самых ПОСЛЕДНИХ (новых) записей и сортируем их сверху вниз
+    val resultList = allRecords
+        .takeLast(limit)                  // Берём лимит с конца массива (самые свежие)
+        .sortedByDescending { it.number } // Номер 100 выше, чем 99 (новые вверху)
+
+    return resultList
+}
+
 
     private fun copySelectedFlight() {
         val record = selectedRecord ?: return
