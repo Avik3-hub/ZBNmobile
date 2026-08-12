@@ -1,127 +1,134 @@
-package com.example.zbnreader // Укажите ваш package
+package com.example.zbnreader
 
-import android.util.Log
+import java.util.Locale
 
-data class FlightRecord(
-    val flightNumber: Int,      // Номер включения / полёта
-    val flightSize: Long,       // Размер полёта в байтах
-    val dateStr: String,        // Дата ("ДД.ММ.ГГГГ")
-    val timeStr: String,        // Время ("ЧЧ:ММ:СС")
-    val rawBytes: ByteArray     // Сырые байты записи для отладки
-)
-
-class ZbnTocParser(private val logger: ((String) -> Unit)? = null) {
+class ZbnTocParser(
+    private val logger: ((String) -> Unit)? = null
+) {
 
     companion object {
-        const val RECORD_SIZE = 16 // Стандартная длина блока оглавления ЗБН (16 байт)
+        private const val FRAME_SIZE = 16
+        private const val SYNC_BYTE_1 = 0x55.toByte()
+        private const val SYNC_BYTE_2 = 0xAA.toByte()
     }
 
-    /**
-     * Парсинг буфера оглавления ЗБН
-     */
-    fun parseBuffer(buffer: ByteArray, length: Int): List<FlightRecord> {
-        val flights = mutableListOf<FlightRecord>()
+    fun parseBuffer(buffer: ByteArray, bytesRead: Int): List<FlightRecord> {
+        val records = mutableListOf<FlightRecord>()
+        var i = 0
 
-        if (length < RECORD_SIZE) {
-            logDebug("Буфер слишком мал для парсинга оглавления: $length байт (требуется $RECORD_SIZE)")
-            return flights
-        }
+        while (i <= bytesRead - FRAME_SIZE) {
+            // Проверяем маркер 0x55 0xAA на байтах 12 и 13 текущего кадра
+            if (buffer[i + 12] == SYNC_BYTE_1 && buffer[i + 13] == SYNC_BYTE_2) {
+                val record = parseFrameToFlightRecord(buffer, i)
 
-        // Проходим по буферу с шагом в RECORD_SIZE (16 байт)
-        var offset = 0
-        var recordIndex = 0
-
-        while (offset + RECORD_SIZE <= length) {
-            recordIndex++
-            val chunk = buffer.copyOfRange(offset, offset + RECORD_SIZE)
-            val chunkHex = chunk.joinToString(" ") { String.format("%02X", it) }
-
-            try {
-                // 1. Разбор номера включения (байты 0..1). 
-                // Пробуем Little-Endian (стандарт FTDI/ARM). Если значения неадекватны, переключаем на BE.
-                val flightNum = readUInt16LE(chunk, 0)
-
-                // 2. Разбор размера полёта в байтах/словах (байты 2..5)
-                val flightSize = readUInt32LE(chunk, 2)
-
-                // 3. Разбор даты (байты 6..8) — День, Месяц, Год (BCD)
-                val day = bcdToDec(chunk[6])
-                val month = bcdToDec(chunk[7])
-                val yearShort = bcdToDec(chunk[8])
-                val year = if (yearShort in 0..99) 2000 + yearShort else yearShort
-
-                // 4. Разбор времени (байты 9..11) — Часы, Минуты, Секунды (BCD)
-                val hour = bcdToDec(chunk[9])
-                val minute = bcdToDec(chunk[10])
-                val second = bcdToDec(chunk[11])
-
-                // Формируем строки даты и времени
-                val dateStr = String.format("%02d.%02d.%04d", day, month, year)
-                val timeStr = String.format("%02d:%02d:%02d", hour, minute, second)
-
-                // 5. Валидация кадра (Мягкая проверка, чтобы не отбрасывать полёты со сбитыми часами)
-                val isValidNumber = flightNum in 1..65535
-                val isValidDate = (month in 1..12) && (day in 1..31)
-
-                if (isValidNumber && isValidDate) {
-                    val record = FlightRecord(
-                        flightNumber = flightNum,
-                        flightSize = flightSize,
-                        dateStr = dateStr,
-                        timeStr = timeStr,
-                        rawBytes = chunk
-                    )
-                    flights.add(record)
-                    logDebug("✅ Запись #$recordIndex распознана: Полет №$flightNum | Размер: $flightSize байт | $dateStr $timeStr")
+                if (record != null) {
+                    records.add(record)
+                    i += FRAME_SIZE // Переходим к следующему кадру
+                    continue
                 } else {
-                    logDebug("⚠️ Запись #$recordIndex отброшена (непроход валидации): №=$flightNum, Дата=$dateStr, HEX=[$chunkHex]")
+                    logDebug("Кадр на смещении $i имеет неверную CRC16 и был пропущен.")
                 }
-
-            } catch (e: Exception) {
-                logDebug("❌ Ошибка парсинга блока #$recordIndex at offset $offset: ${e.message}")
             }
-
-            offset += RECORD_SIZE
+            i++
         }
 
-        logDebug("Итог парсинга: успешно распознано ${flights.size} включений из $recordIndex блоков.")
-        return flights
+        return records
+    }
+
+    private fun parseFrameToFlightRecord(buffer: ByteArray, offset: Int): FlightRecord? {
+        // Проверка CRC16 (байты 14-15, Little-Endian)
+        val expectedCrc = ((buffer[offset + 15].toInt() and 0xFF) shl 8) or (buffer[offset + 14].toInt() and 0xFF)
+        val calculatedCrc = calculateCrc16(buffer, offset, 14)
+
+        if (expectedCrc != calculatedCrc) {
+            logDebug(String.format("Сбой CRC16! Ожидалось: 0x%04X, Рассчитано: 0x%04X", expectedCrc, calculatedCrc))
+            return null
+        }
+
+        // Байт 0: Индекс сектора / № включения
+        val sectorIndex = buffer[offset + 0].toInt() and 0xFF
+
+        // Байт 1: Статусный байт / Бортовой номер
+        val tailNumRaw = buffer[offset + 1].toInt() and 0xFF
+        val tailNumVal = String.format(Locale.US, "%03d", tailNumRaw)
+
+        // Байты 2..4: 24-битный адрес смещения в памяти (Little-Endian)
+        val addrLsb = buffer[offset + 2].toInt() and 0xFF
+        val addrMid = buffer[offset + 3].toInt() and 0xFF
+        val addrMsb = buffer[offset + 4].toInt() and 0xFF
+        val startAddress = (addrMsb shl 16) or (addrMid shl 8) or addrLsb
+
+        // --- РАЗБОР МЕТАДАННЫХ (Байты 5..11) ---
+        val day = bcdToInt(buffer[offset + 5])
+        val hour = bcdToInt(buffer[offset + 6])
+        val min = bcdToInt(buffer[offset + 7])
+        val sec = bcdToInt(buffer[offset + 8])
+        val month = bcdToInt(buffer[offset + 9])
+        
+        // Байт 10: Год в формате BCD (например, 0x26 -> 26)
+        val parsedYear = bcdToInt(buffer[offset + 10])
+        val year = if (parsedYear in 0..99) parsedYear else 26
+
+        val startTimeFormatted = String.format(
+            Locale.US,
+            "%02d:%02d:%02d",
+            hour.coerceIn(0, 23),
+            min.coerceIn(0, 59),
+            sec.coerceIn(0, 59)
+        )
+        val dateFormatted = String.format(
+            Locale.US,
+            "%02d.%02d.%02d",
+            day.coerceIn(1, 31),
+            month.coerceIn(1, 12),
+            year
+        )
+
+        // Байт 11: Номер рейса
+        val flightNumVal = (buffer[offset + 11].toInt() and 0xFF).toString()
+
+        return FlightRecord(
+            number = sectorIndex,
+            sizeBytes = startAddress.toLong(),
+            date = dateFormatted,
+            duration = "--:--",
+            startTime = startTimeFormatted,
+            endTime = "-",
+            flightNum = flightNumVal,
+            tailNum = tailNumVal
+        )
     }
 
     /**
-     * Безопасная конвертация BCD (Binary Coded Decimal) в обычный Int.
-     * Защищена от отрицательных Byte в Kotlin за счет `and 0xFF`.
+     * Преобразование BCD (Binary-Coded Decimal) в обычный Int.
      */
-    private fun bcdToDec(b: Byte): Int {
-        val unsigned = b.toInt() and 0xFF
-        val high = (unsigned ushr 4) and 0x0F
-        val low = unsigned and 0x0F
-        
-        // Защитный фоллбэк: если данные приходят в обычном двоичном формате (HEX/DEC), а не BCD
-        if (high > 9 || low > 9) {
-            return unsigned
+    private fun bcdToInt(b: Byte): Int {
+        val byteVal = b.toInt() and 0xFF
+        val high = byteVal ushr 4
+        val low = byteVal and 0x0F
+        return if (high <= 9 && low <= 9) {
+            high * 10 + low
+        } else {
+            byteVal
         }
-        return high * 10 + low
     }
 
-    // Чтение 16-битного целого (Little-Endian)
-    private fun readUInt16LE(bytes: ByteArray, offset: Int): Int {
-        val b0 = bytes[offset].toInt() and 0xFF
-        val b1 = bytes[offset + 1].toInt() and 0xFF
-        return b0 or (b1 shl 8)
+    private fun calculateCrc16(bytes: ByteArray, offset: Int, length: Int): Int {
+        var crc = 0xFFFF
+        for (j in offset until (offset + length)) {
+            crc = crc xor (bytes[j].toInt() and 0xFF)
+            for (k in 0 until 8) {
+                crc = if ((crc and 0x0001) != 0) {
+                    (crc ushr 1) xor 0xA001
+                } else {
+                    crc ushr 1
+                }
+            }
+        }
+        return crc and 0xFFFF
     }
 
-    // Чтение 32-битного целого (Little-Endian)
-    private fun readUInt32LE(bytes: ByteArray, offset: Int): Long {
-        val b0 = bytes[offset].toLong() and 0xFF
-        val b1 = bytes[offset + 1].toLong() and 0xFF
-        val b2 = bytes[offset + 2].toLong() and 0xFF
-        val b3 = bytes[offset + 3].toLong() and 0xFF
-        return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
-    }
-
-    private fun logDebug(msg: String) {
-        Log.d("ZBN_TOC_PARSER", msg)
-        logger?.invoke(msg)
+    private fun logDebug(message: String) {
+        logger?.invoke("[ZbnTocParser] $message")
     }
 }
