@@ -314,11 +314,9 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
     val ascii = bytes.take(length).map { 
         if (it in 32..126) it.toInt().toChar() else '.' 
     }.joinToString("")
-
+    
     log("[$tag] Байт: $length | HEX: [$hex] | ASCII: [$ascii]")
 }
-
-
 
     private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
         button.isEnabled = enabled
