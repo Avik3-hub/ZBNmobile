@@ -72,7 +72,7 @@ class ZbnTocParser(private val logger: ((String) -> Unit)? = null) {
         val flightName = bcdToString(byteArrayOf(frame[12], frame[13]))
 
         // 6. Борт (3 байта BCD)
-        val tailNumber = bcdToString(byteArrayOf(frame[14], frame[15], frame[16]))
+        val tailNumber = bcdToString(byteArrayOf(frame[14], frame[15]))
 
         // Если рейс или борт не распарсились из-за сбоя BCD
         if (flightName == null || tailNumber == null) return null
