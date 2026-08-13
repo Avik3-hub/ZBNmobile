@@ -312,15 +312,14 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
     }
     // Формируем HEX-представление (например: 06 00 FF 3A)
     val hex = bytes.take(length).joinToString(" ") { String.format("%02X", it) }
+    
     // Формируем ASCII-представление для читаемых символов
     val ascii = bytes.take(length).map { 
         if (it in 32..126) it.toInt().toChar() else '.' 
     }.joinToString("")
-    
-    // Передаем готовый красивый строковый результат в вашу функцию log
+
     log("[$tag] Байт: $length | HEX: [$hex] | ASCII: [$ascii]")
 }
-
 
 
     private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
