@@ -305,18 +305,26 @@ private fun log(message: String, throwable: Throwable? = null) {
 }
 
 // 2. Добавляем рядом функцию форматирования байтов, которая вызывает ваш log(...)
+/**
+ * Функция вывода сырых байтов USB в HEX и ASCII формате
+ */
 private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
     if (length <= 0) {
-        log("[$tag] Получено байт: 0 (таймаут или пустой буфер)") // ⬅️ Используем log, а не appendLog
+        log("[$tag] Получено байт: 0 (таймаут или пустой буфер)")
         return
     }
+    // Формируем HEX-представление (например: 05 06 55 AA)
     val hex = bytes.take(length).joinToString(" ") { String.format("%02X", it) }
+    
+    // Формируем ASCII-представление для читаемых символов
     val ascii = bytes.take(length).map { 
         if (it in 32..126) it.toInt().toChar() else '.' 
     }.joinToString("")
-    
-    log("[$tag] Байт: $length | HEX: [$hex] | ASCII: [$ascii]") // ⬅️ Используем log
+
+    // Вызываем вашу штатную функцию log вместо несуществующей appendLog
+    log("[$tag] Байт: $length | HEX: [$hex] | ASCII: [$ascii]")
 }
+
 
 
     private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
