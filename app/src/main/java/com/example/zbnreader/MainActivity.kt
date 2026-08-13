@@ -307,7 +307,7 @@ private fun log(message: String, throwable: Throwable? = null) {
 // 2. Добавляем рядом функцию форматирования байтов, которая вызывает ваш log(...)
 private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
     if (length <= 0) {
-        log("[$tag] Получено байт: 0 (таймаут или пустой буфер)")
+        log("[$tag] Получено байт: 0 (таймаут или пустой буфер)") // ⬅️ Используем log, а не appendLog
         return
     }
     val hex = bytes.take(length).joinToString(" ") { String.format("%02X", it) }
@@ -315,8 +315,9 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
         if (it in 32..126) it.toInt().toChar() else '.' 
     }.joinToString("")
     
-    log("[$tag] Байт: $length | HEX: [$hex] | ASCII: [$ascii]")
+    log("[$tag] Байт: $length | HEX: [$hex] | ASCII: [$ascii]") // ⬅️ Используем log
 }
+
 
     private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
         button.isEnabled = enabled
