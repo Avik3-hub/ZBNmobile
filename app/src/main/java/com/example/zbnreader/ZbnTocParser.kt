@@ -1,17 +1,19 @@
+package com.example.zbnreader
+
 // 1. Безопасное декодирование одного BCD-байта в целое число (0x93 -> 93)
 fun bcdToInt(b: Byte): Int {
     val v = b.toInt() and 0xFF
     val high = (v ushr 4) and 0x0F
     val low = v and 0x0F
     
-    // Если полубайт выходит за рамки BCD (например, 0xFF заполнитель), мягко заменяем на 0
+    // Если полубайт выходит за рамки BCD, мягко заменяем на 0
     val safeHigh = if (high > 9) 0 else high
     val safeLow = if (low > 9) 0 else low
     
     return safeHigh * 10 + safeLow
 }
 
-// 2. Безопасное декодирование BCD-байтов в строку (гарантированно возвращает String)
+// 2. Безопасное декодирование BCD-байтов в строку
 fun bcdToString(bytes: ByteArray): String {
     val sb = StringBuilder()
     for (b in bytes) {
@@ -28,15 +30,14 @@ fun bcdToString(bytes: ByteArray): String {
     return if (result.isEmpty()) "0" else result
 }
 
-// 3. Безопасный разбор кадра оглавления
-// 3. Безопасный разбор кадра оглавления
+// 3. Разбор кадра оглавления
 fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
     if (frame.size < 16) return null
 
-    // 1. Номер включения (2 байта, Big-Endian)
-    val parsedFlightNum = ((frame[0].toInt() and 0xFF) shl 8) or (frame[1].toInt() and 0xFF)
+    // 1. Номер включения (2 байта, Big-Endian -> Int)
+    val parsedIncNumber = ((frame[0].toInt() and 0xFF) shl 8) or (frame[1].toInt() and 0xFF)
 
-    // 2. Размер включения (4 байта)
+    // 2. Размер включения (4 байта -> Long)
     val parsedSizeBytes = ((frame[2].toLong() and 0xFF) shl 24) or
                           ((frame[3].toLong() and 0xFF) shl 16) or
                           ((frame[4].toLong() and 0xFF) shl 8) or
@@ -48,16 +49,16 @@ fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
     val day = bcdToInt(frame[8])
     val dateStr = String.format("%02d.%02d.20%02d", day, month, year)
 
-    // 4. Время (3 байта BCD: [Часы, Минуты, Секунды])
+    // 4. Время начала (3 байта BCD: [Часы, Минуты, Секунды])
     val hour = bcdToInt(frame[9])
     val min = bcdToInt(frame[10])
     val sec = bcdToInt(frame[11])
     val timeStr = String.format("%02d:%02d:%02d", hour, min, sec)
 
-    // 5. Рейс (2 байта BCD)
-    val parsedFlightName = bcdToString(byteArrayOf(frame[12], frame[13]))
+    // 5. Номер рейса (2 байта BCD -> String)
+    val parsedFlightNum = bcdToString(byteArrayOf(frame[12], frame[13]))
 
-    // 6. Бортовой номер
+    // 6. Бортовой номер (2 или 3 байта BCD -> String)
     val tailBytes = if (frame.size >= 17) {
         byteArrayOf(frame[14], frame[15], frame[16])
     } else {
@@ -65,13 +66,15 @@ fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
     }
     val parsedTailNum = bcdToString(tailBytes)
 
-    // Возвращаем FlightRecord с явной связкой "параметр_класса = локальная_переменная"
+    // Создаём объект FlightRecord со строгим соответствием названий и типов полей
     return FlightRecord(
-        flightNum = parsedFlightNum,
-        sizeBytes = parsedSizeBytes,
-        date = dateStr,
-        time = timeStr,
-        flight = parsedFlightName,
-        tailNum = parsedTailNum
+        number = parsedIncNumber,        // № включения (Int)
+        sizeBytes = parsedSizeBytes,     // Размер в байтах (Long)
+        date = dateStr,                  // Дата (String)
+        duration = "",                   // Продолжительность (рассчитывается отдельно или "")
+        startTime = timeStr,             // Время начала (String)
+        endTime = "",                    // Время окончания (String)
+        flightNum = parsedFlightNum,     // Рейс (String)
+        tailNum = parsedTailNum          // Бортовой номер (String)
     )
 }
