@@ -1,6 +1,8 @@
 package com.example.zbnreader
 
-class ZbnTocParser {
+import java.util.Locale
+
+object ZbnTocParser {
 
     // 1. Безопасное декодирование одного BCD-байта в целое число (0x93 -> 93)
     fun bcdToInt(b: Byte): Int {
@@ -8,7 +10,6 @@ class ZbnTocParser {
         val high = (v ushr 4) and 0x0F
         val low = v and 0x0F
         
-        // Если полубайт выходит за рамки BCD, мягко заменяем на 0
         val safeHigh = if (high > 9) 0 else high
         val safeLow = if (low > 9) 0 else low
         
@@ -32,7 +33,7 @@ class ZbnTocParser {
         return if (result.isEmpty()) "0" else result
     }
 
-    // 3. Разбор одного кадра оглавления (16-17 байт)
+    // 3. Разбор кадра оглавления
     fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
         if (frame.size < 16) return null
 
@@ -68,20 +69,19 @@ class ZbnTocParser {
         }
         val parsedTailNum = bcdToString(tailBytes)
 
-        // Создаём объект FlightRecord со строгим соответствием названий и типов полей
         return FlightRecord(
-            number = parsedIncNumber,        // № включения (Int)
-            sizeBytes = parsedSizeBytes,     // Размер в байтах (Long)
-            date = dateStr,                  // Дата (String)
-            duration = "",                   // Продолжительность
-            startTime = timeStr,             // Время начала (String)
-            endTime = "",                    // Время окончания (String)
-            flightNum = parsedFlightNum,     // Рейс (String)
-            tailNum = parsedTailNum          // Бортовой номер (String)
+            number = parsedIncNumber,
+            sizeBytes = parsedSizeBytes,
+            date = dateStr,
+            duration = "",
+            startTime = timeStr,
+            endTime = "",
+            flightNum = parsedFlightNum,
+            tailNum = parsedTailNum
         )
     }
 
-    // 4. Метод полного разбора буфера оглавления на список записей FlightRecord
+    // 4. Метод разбора полного буфера оглавления на список записей
     fun parse(data: ByteArray, frameSize: Int = 16): List<FlightRecord> {
         val records = mutableListOf<FlightRecord>()
         var offset = 0
