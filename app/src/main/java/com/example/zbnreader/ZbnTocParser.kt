@@ -29,37 +29,33 @@ fun bcdToString(bytes: ByteArray): String {
 }
 
 // 3. Безопасный разбор кадра оглавления
+// 3. Безопасный разбор кадра оглавления
 fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
     if (frame.size < 16) return null
 
-    // Проверка маркера синхронизации (если кадр передается целиком)
-    if (frame[0] == 0x55.toByte() && frame[1] == 0xAA.toByte()) {
-        // Кадр содержит маркер sync, смещения данных начинаются с frame[2]
-    }
-
-    // 1. Номер включения/рейса (2 байта)
-    val flightNum = ((frame[0].toInt() and 0xFF) shl 8) or (frame[1].toInt() and 0xFF)
+    // 1. Номер включения (2 байта, Big-Endian)
+    val parsedFlightNum = ((frame[0].toInt() and 0xFF) shl 8) or (frame[1].toInt() and 0xFF)
 
     // 2. Размер включения (4 байта)
-    val size = ((frame[2].toLong() and 0xFF) shl 24) or
-               ((frame[3].toLong() and 0xFF) shl 16) or
-               ((frame[4].toLong() and 0xFF) shl 8) or
-               (frame[5].toLong() and 0xFF)
+    val parsedSizeBytes = ((frame[2].toLong() and 0xFF) shl 24) or
+                          ((frame[3].toLong() and 0xFF) shl 16) or
+                          ((frame[4].toLong() and 0xFF) shl 8) or
+                          (frame[5].toLong() and 0xFF)
 
-    // 3. Дата (3 байта BCD: Год, Месяц, День)
+    // 3. Дата (3 байта BCD: [Год, Месяц, День])
     val year = bcdToInt(frame[6])
     val month = bcdToInt(frame[7])
     val day = bcdToInt(frame[8])
     val dateStr = String.format("%02d.%02d.20%02d", day, month, year)
 
-    // 4. Время (3 байта BCD: Часы, Минуты, Секунды)
+    // 4. Время (3 байта BCD: [Часы, Минуты, Секунды])
     val hour = bcdToInt(frame[9])
     val min = bcdToInt(frame[10])
     val sec = bcdToInt(frame[11])
     val timeStr = String.format("%02d:%02d:%02d", hour, min, sec)
 
     // 5. Рейс (2 байта BCD)
-    val flightName = bcdToString(byteArrayOf(frame[12], frame[13]))
+    val parsedFlightName = bcdToString(byteArrayOf(frame[12], frame[13]))
 
     // 6. Бортовой номер
     val tailBytes = if (frame.size >= 17) {
@@ -67,16 +63,15 @@ fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
     } else {
         byteArrayOf(frame[14], frame[15])
     }
-    val tailNumber = bcdToString(tailBytes)
+    val parsedTailNum = bcdToString(tailBytes)
 
-    // Возвращаем объект с именами полей, требуемыми конструктором:
+    // Возвращаем FlightRecord с явной связкой "параметр_класса = локальная_переменная"
     return FlightRecord(
-        flightNum = flightNum,
-        sizeBytes = size,
-        startTime = dateStr,
-        endTime = "",
-        duration = timeStr,
-        tailNum = tailNumber
+        flightNum = parsedFlightNum,
+        sizeBytes = parsedSizeBytes,
+        date = dateStr,
+        time = timeStr,
+        flight = parsedFlightName,
+        tailNum = parsedTailNum
     )
 }
-
