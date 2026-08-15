@@ -2,38 +2,45 @@ package com.example.zbnreader
 
 import java.util.Locale
 
-object ZbnTocParser {
+class ZbnTocParser {
 
-    // 1. Безопасное декодирование одного BCD-байта в целое число (0x93 -> 93)
+    /**
+     * 1. Безопасное декодирование одного BCD-байта в целое число (0x93 -> 93)
+     */
     fun bcdToInt(b: Byte): Int {
         val v = b.toInt() and 0xFF
         val high = (v ushr 4) and 0x0F
         val low = v and 0x0F
-        
+
+        // Если полубайт выходит за рамки BCD, мягко заменяем на 0
         val safeHigh = if (high > 9) 0 else high
         val safeLow = if (low > 9) 0 else low
-        
+
         return safeHigh * 10 + safeLow
     }
 
-    // 2. Безопасное декодирование BCD-байтов в строку
+    /**
+     * 2. Безопасное декодирование BCD-байтов в строку
+     */
     fun bcdToString(bytes: ByteArray): String {
         val sb = StringBuilder()
         for (b in bytes) {
             val v = b.toInt() and 0xFF
             val high = (v ushr 4) and 0x0F
             val low = v and 0x0F
-            
+
             val safeHigh = if (high > 9) '0' else ('0' + high)
             val safeLow = if (low > 9) '0' else ('0' + low)
-            
+
             sb.append(safeHigh).append(safeLow)
         }
         val result = sb.toString().trimStart('0')
         return if (result.isEmpty()) "0" else result
     }
 
-    // 3. Разбор кадра оглавления
+    /**
+     * 3. Разбор одного кадра оглавления (16-17 байт)
+     */
     fun parseFrameToFlightRecord(frame: ByteArray): FlightRecord? {
         if (frame.size < 16) return null
 
@@ -42,9 +49,9 @@ object ZbnTocParser {
 
         // 2. Размер включения (4 байта -> Long)
         val parsedSizeBytes = ((frame[2].toLong() and 0xFF) shl 24) or
-                              ((frame[3].toLong() and 0xFF) shl 16) or
-                              ((frame[4].toLong() and 0xFF) shl 8) or
-                              (frame[5].toLong() and 0xFF)
+                ((frame[3].toLong() and 0xFF) shl 16) or
+                ((frame[4].toLong() and 0xFF) shl 8) or
+                (frame[5].toLong() and 0xFF)
 
         // 3. Дата (3 байта BCD: [Год, Месяц, День])
         val year = bcdToInt(frame[6])
@@ -69,19 +76,22 @@ object ZbnTocParser {
         }
         val parsedTailNum = bcdToString(tailBytes)
 
+        // Создаём объект FlightRecord со строгим соответствием названий и типов полей
         return FlightRecord(
-            number = parsedIncNumber,
-            sizeBytes = parsedSizeBytes,
-            date = dateStr,
-            duration = "",
-            startTime = timeStr,
-            endTime = "",
-            flightNum = parsedFlightNum,
-            tailNum = parsedTailNum
+            number = parsedIncNumber,        // № включения (Int)
+            sizeBytes = parsedSizeBytes,     // Размер в байтах (Long)
+            date = dateStr,                  // Дата (String)
+            duration = "",                   // Продолжительность
+            startTime = timeStr,             // Время начала (String)
+            endTime = "",                    // Время окончания (String)
+            flightNum = parsedFlightNum,     // Рейс (String)
+            tailNum = parsedTailNum          // Бортовой номер (String)
         )
     }
 
-    // 4. Метод разбора полного буфера оглавления на список записей
+    /**
+     * 4. Метод полного разбора буфера оглавления на список записей FlightRecord
+     */
     fun parse(data: ByteArray, frameSize: Int = 16): List<FlightRecord> {
         val records = mutableListOf<FlightRecord>()
         var offset = 0
