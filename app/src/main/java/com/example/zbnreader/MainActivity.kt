@@ -614,6 +614,7 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
 
 
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
+    private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
     val allRecords = mutableListOf<FlightRecord>()
     
     // 1. Отправляем команду запроса оглавления ('M' / 0x4D)
@@ -621,19 +622,18 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
     
     val buffer = ByteArray(16384)
     var noDataCounter = 0
-
-    // 2. Вычитываем ВСЁ оглавление из накопителя до упора (пока не перестанут идти данные)
+    
+    // 2. Вычитываем оглавление из накопителя
     while (noDataCounter < 3) {
         try {
             val count = port.read(buffer, 5000)
             logBytes("RX_TOC", buffer, count)
-
             if (count > 0) {
                 noDataCounter = 0
-                val parsedRecords = tocParser.parseBuffer(buffer, count)
+                // Передаем точный срез вычитанных байтов в метод parse()
+                val parsedRecords = tocParser.parse(buffer.copyOf(count))
                 allRecords.addAll(parsedRecords)
-
-                // Обновляем статус: показываем, сколько всего полётов найдено в памяти
+                
                 runOnUiThread {
                     tvStatus.text = "Статус: Найдено включений в ЗБН: ${allRecords.size}..."
                 }
@@ -645,15 +645,13 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
             break
         }
     }
-
+    
     log("Вычитывание завершено. Всего записей в ЗБН: ${allRecords.size}")
-
-    // 3. Отбираем N самых ПОСЛЕДНИХ (новых) записей и сортируем их сверху вниз
-    val resultList = allRecords
-        .takeLast(limit)                  // Берём лимит с конца массива (самые свежие)
-        .sortedByDescending { it.number } // Номер 100 выше, чем 99 (новые вверху)
-
-    return resultList
+    
+    // 3. Отбираем N последних записей и сортируем их
+    return allRecords
+        .takeLast(limit)
+        .sortedByDescending { it.number }
 }
 
 
