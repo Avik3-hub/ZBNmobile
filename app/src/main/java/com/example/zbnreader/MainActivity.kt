@@ -614,7 +614,6 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
 
 
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
-    private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
     val allRecords = mutableListOf<FlightRecord>()
     
     // 1. Отправляем команду запроса оглавления ('M' / 0x4D)
