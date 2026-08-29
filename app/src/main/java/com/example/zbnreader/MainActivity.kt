@@ -35,9 +35,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-
 class MainActivity : AppCompatActivity() {
-
     // Цветовая палитра в стиле Google Gemini (Dark Theme)
     private val COLOR_BG = Color.parseColor("#131314")
     private val COLOR_SURFACE = Color.parseColor("#1E1F20")
@@ -65,7 +63,6 @@ class MainActivity : AppCompatActivity() {
     private val flightList = mutableListOf<FlightRecord>()
     private var selectedRecord: FlightRecord? = null
     private var selectedRow: TableRow? = null
-
     private val tocParser = ZbnTocParser()
     private val downloadedRecordNumbers = mutableSetOf<Int>()
     private val errorRecordNumbers = mutableSetOf<Int>()
@@ -94,7 +91,6 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, 0, 0, 12)
         }
-
         tvStatus = TextView(this).apply {
             text = "Статус: Подключите ЗБН и нажмите «Начать сканирование»"
             textSize = 12f
@@ -104,7 +100,6 @@ class MainActivity : AppCompatActivity() {
                 setMargins(0, 0, 12, 0)
             }
         }
-
         val btnSettings = Button(this).apply {
             text = "Настройки"
             textSize = 12f
@@ -114,7 +109,6 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
         }
-
         topPanel.addView(tvStatus)
         topPanel.addView(btnSettings)
         root.addView(topPanel)
@@ -128,7 +122,6 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { startReading() }
         }
         setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
-
         val startParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
@@ -145,14 +138,12 @@ class MainActivity : AppCompatActivity() {
             ).apply { setMargins(0, 0, 0, 14) }
             setPadding(10, 10, 10, 10)
         }
-
         val scrollTable = HorizontalScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.MATCH_PARENT
             )
         }
-
         val verticalScroll = ScrollView(this)
         tableLayout = TableLayout(this).apply {
             isStretchAllColumns = false
@@ -177,11 +168,9 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 14)
         }
-
         val btnParams = LinearLayout.LayoutParams(0, 110, 1f).apply {
             setMargins(4, 0, 4, 0)
         }
-
         btnCopySelected = Button(this).apply {
             text = "Копировать"
             textSize = 12f
@@ -220,14 +209,12 @@ class MainActivity : AppCompatActivity() {
             )
             setPadding(10, 10, 10, 10)
         }
-
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.MATCH_PARENT
             )
         }
-
         tvLog = TextView(this).apply {
             textSize = 11f
             setTextColor(COLOR_TEXT_MUTED)
@@ -272,61 +259,46 @@ class MainActivity : AppCompatActivity() {
         return drivers.firstOrNull()
     }
 
-    // 1. Оставляем вашу основную функцию без изменений
-private fun log(message: String, throwable: Throwable? = null) {
-    val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
-    val logLine = if (throwable != null) {
-        "[$timeStamp] $message\nИсключение: ${throwable.localizedMessage}\n${throwable.stackTraceToString()}"
-    } else {
-        "[$timeStamp] $message"
-    }
-
-    android.util.Log.d("ZBN_DEBUG", logLine)
-
-    runOnUiThread {
-        try {
-            tvLog.append("$logLine\n")
-        } catch (e: Exception) {
-            e.printStackTrace()
+    private fun log(message: String, throwable: Throwable? = null) {
+        val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
+        val logLine = if (throwable != null) {
+            "[$timeStamp] $message\nИсключение: ${throwable.localizedMessage}\n${throwable.stackTraceToString()}"
+        } else {
+            "[$timeStamp] $message"
         }
-    }
-
-    lifecycleScope.launch(Dispatchers.IO) {
-        try {
-            val mainFolder = File(getExternalFilesDir(null), "ZBNreader")
-            if (!mainFolder.exists()) {
-                mainFolder.mkdirs()
+        android.util.Log.d("ZBN_DEBUG", logLine)
+        runOnUiThread {
+            try {
+                tvLog.append("$logLine\n")
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            val logFile = File(mainFolder, "zbn_app_log.txt")
-            logFile.appendText("$logLine\n----------------------------------------\n")
-        } catch (e: Exception) {
-            android.util.Log.e("ZBN_DEBUG", "Ошибка записи лога на диск: ${e.localizedMessage}")
+        }
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val mainFolder = File(getExternalFilesDir(null), "ZBNreader")
+                if (!mainFolder.exists()) {
+                    mainFolder.mkdirs()
+                }
+                val logFile = File(mainFolder, "zbn_app_log.txt")
+                logFile.appendText("$logLine\n----------------------------------------\n")
+            } catch (e: Exception) {
+                android.util.Log.e("ZBN_DEBUG", "Ошибка записи лога на диск: ${e.localizedMessage}")
+            }
         }
     }
-}
 
-// 2. Добавляем рядом функцию форматирования байтов, которая вызывает ваш log(...)
-/**
- * Функция вывода сырых байтов USB в HEX и ASCII формате
- */
-private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
-    if (length <= 0) {
-        log("[$tag] Получено байт: 0 (таймаут или пустой буфер)")
-        return
+    private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
+        if (length <= 0) {
+            log("[$tag] Получено байт: 0 (таймаут или пустой буфер)")
+            return
+        }
+        val hex = bytes.take(length).joinToString(" ") { String.format("%02X", it) }
+        val ascii = bytes.take(length).map { 
+            if (it in 32..126) it.toInt().toChar() else '.' 
+        }.joinToString("")
+        log("[$tag] Байт: $length | HEX: [$hex] | ASCII: [$ascii]")
     }
-    // Формируем HEX-представление (например: 05 06 55 AA)
-    val hex = bytes.take(length).joinToString(" ") { String.format("%02X", it) }
-    
-    // Формируем ASCII-представление для читаемых символов
-    val ascii = bytes.take(length).map { 
-        if (it in 32..126) it.toInt().toChar() else '.' 
-    }.joinToString("")
-
-    // Вызываем вашу штатную функцию log вместо несуществующей appendLog
-    log("[$tag] Байт: $length | HEX: [$hex] | ASCII: [$ascii]")
-}
-
-
 
     private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
         button.isEnabled = enabled
@@ -515,144 +487,139 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
     }
 
     private fun startReading() {
-    setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
-    setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
-    progressBar.isIndeterminate = false
-    progressBar.max = 100
-    progressBar.progress = 0
-    progressBar.visibility = View.VISIBLE
-    tvLog.text = ""
-    tvStatus.text = "Статус: Подключение..."
-    val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-    
-    val currentBaudRate = prefs.getInt("baud_rate", 921600)
-    
-    val sessionLimit = try {
-        prefs.getInt("limit", 6)
-    } catch (_: Exception) {
-        prefs.getString("limit", "6")?.toIntOrNull() ?: 6
-    }
-    log("Запуск сканирования. Скорость: $currentBaudRate бод, Лимит: $sessionLimit")
-    lifecycleScope.launch(Dispatchers.IO) {
-        val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-        val driver = findUsbDriver(usbManager)
-        if (driver == null) {
-            log("Ошибка: USB-RS422 конвертер не обнаружен или не опознан!")
-            updateStatus("Статус: Ошибка (Нет адаптера)")
-            resetUi()
-            return@launch
+        setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
+        setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+        progressBar.isIndeterminate = false
+        progressBar.max = 100
+        progressBar.progress = 0
+        progressBar.visibility = View.VISIBLE
+        tvLog.text = ""
+        tvStatus.text = "Статус: Подключение..."
+        
+        // Очищаем старые данные из интерфейса перед новым сканированием
+        flightList.clear()
+        renderTableHeader()
+
+        val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+        val currentBaudRate = prefs.getInt("baud_rate", 115200)
+        
+        val sessionLimit = try {
+            prefs.getInt("limit", 6)
+        } catch (_: Exception) {
+            prefs.getString("limit", "6")?.toIntOrNull() ?: 6
         }
-        val connection = usbManager.openDevice(driver.device)
-        if (connection == null) {
-            log("Ошибка: Нет разрешения на использование USB!")
-            updateStatus("Статус: Ошибка доступа к USB")
-            resetUi()
-            return@launch
-        }
-        val port = driver.ports[0]
-        try {
-            port.open(connection)
-            port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-            port.dtr = false
-            port.rts = false
-
-            // ⬇️ ⬇️ ⬇️ ВСТАВЛЕННЫЙ БЛОК РУКОПОЖАТИЯ С ПОДРОБНЫМ ЛОГОМ ⬇️ ⬇️ ⬇️
-            
-            // 1. Отправка запроса ENQ
-            val enqPacket = byteArrayOf(0x05)
-            port.write(enqPacket, 1000)
-            log("Отправка ENQ (0x05)...")
-
-            // 2. Чтение ответа с буфером с запасом для FTDI
-            val ackBuf = ByteArray(1024)
-            val readAck = port.read(ackBuf, 1000)
-
-            // 3. Вывод подробных данных в лог (вызовет логирование байтов)
-            logBytes("RX_ACK", ackBuf, readAck)
-            // 4. Проверка результата
-            if (readAck == 0) {
-                log("Ошибка: Ответ от ЗБН не получен (таймаут, 0 байт)")
-                updateStatus("Статус: Сбой рукопожатия")
+        log("Запуск сканирования. Скорость: $currentBaudRate бод, Лимит: $sessionLimit")
+        lifecycleScope.launch(Dispatchers.IO) {
+            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+            val driver = findUsbDriver(usbManager)
+            if (driver == null) {
+                log("Ошибка: USB-RS422 конвертер не обнаружен или не опознан!")
+                updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
                 return@launch
-            } else {
-                val responseByte = ackBuf[0] 
-                if (responseByte == 0x06.toByte()) {
-                    log("Успех: Получен ACK (0x06). Чтение оглавления...")
-                } else {
-                    log("Ошибка: Неверный ответ. Ожидался 0x06, получено: 0x${String.format("%02X", responseByte)}")
+            }
+            val connection = usbManager.openDevice(driver.device)
+            if (connection == null) {
+                log("Ошибка: Нет разрешения на использование USB!")
+                updateStatus("Статус: Ошибка доступа к USB")
+                resetUi()
+                return@launch
+            }
+            val port = driver.ports[0]
+            try {
+                port.open(connection)
+                port.setParameters(currentBaudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                port.dtr = false
+                port.rts = false
+                
+                // 1. Отправка запроса ENQ
+                val enqPacket = byteArrayOf(0x05)
+                port.write(enqPacket, 1000)
+                log("Отправка ENQ (0x05)...")
+
+                // 2. Чтение ответа с буфером с запасом для FTDI
+                val ackBuf = ByteArray(1024)
+                val readAck = port.read(ackBuf, 1000)
+                
+                logBytes("RX_ACK", ackBuf, readAck)
+
+                // 3. Проверка результата
+                if (readAck == 0) {
+                    log("Ошибка: Ответ от ЗБН не получен (таймаут, 0 байт)")
                     updateStatus("Статус: Сбой рукопожатия")
                     resetUi()
                     return@launch
+                } else {
+                    val responseByte = ackBuf[0] 
+                    if (responseByte == 0x06.toByte()) {
+                        log("Успех: Получен ACK (0x06). Чтение оглавления...")
+                    } else {
+                        log("Ошибка: Неверный ответ. Ожидался 0x06, получено: 0x${String.format("%02X", responseByte)}")
+                        updateStatus("Статус: Сбой рукопожатия")
+                        resetUi()
+                        return@launch
+                    }
                 }
-            }
 
-            // ⬆️ ⬆️ ⬆️ КОНЕЦ БЛОКА РУКОПОЖАТИЯ ⬆️ ⬆️ ⬆️
-
-            val records = readCatalog(port, sessionLimit)
-            runOnUiThread {
-                flightList.clear()
-                flightList.addAll(records)
-                updateTableUI(flightList)
+                val records = readCatalog(port, sessionLimit)
+                runOnUiThread {
+                    flightList.clear()
+                    flightList.addAll(records)
+                    updateTableUI(flightList)
+                }
+                if (records.isEmpty()) {
+                    updateStatus("Статус: Оглавление пусто")
+                    log("Оглавление пустое или не удалось распарсить записи.")
+                } else {
+                    updateStatus("Статус: Загружено ${records.size} включений")
+                    log("Успешно прочитано включений: ${records.size}")
+                }
+            } catch (e: Exception) {
+                log("Сбой процесса чтения оглавления", e)
+                updateStatus("Статус: Сбой передачи")
+            } finally {
+                try { port.close() } catch (e: Exception) { log("Ошибка закрытия порта", e) }
+                resetUi()
             }
-            if (records.isEmpty()) {
-                updateStatus("Статус: Оглавление пусто")
-                log("Оглавление пустое или не удалось распарсить записи.")
-            } else {
-                updateStatus("Статус: Загружено ${records.size} включений")
-                log("Успешно прочитано включений: ${records.size}")
-            }
-        } catch (e: Exception) {
-            log("Сбой процесса чтения оглавления", e)
-            updateStatus("Статус: Сбой передачи")
-        } finally {
-            try { port.close() } catch (e: Exception) { log("Ошибка закрытия порта", e) }
-            resetUi()
         }
     }
-}
-
 
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
-    val allRecords = mutableListOf<FlightRecord>()
-    
-    // 1. Отправляем команду запроса оглавления ('M' / 0x4D)
-    port.write(byteArrayOf(0x4D.toByte()), 1000)
-    
-    val buffer = ByteArray(16384)
-    var noDataCounter = 0
-    
-    // 2. Вычитываем оглавление из накопителя
-    while (noDataCounter < 3) {
-        try {
-            val count = port.read(buffer, 5000)
-            logBytes("RX_TOC", buffer, count)
-            if (count > 0) {
-                noDataCounter = 0
-                // Передаем точный срез вычитанных байтов в метод parse()
-                val parsedRecords = tocParser.parse(buffer.copyOf(count))
-                allRecords.addAll(parsedRecords)
-                
-                runOnUiThread {
-                    tvStatus.text = "Статус: Найдено включений в ЗБН: ${allRecords.size}..."
+        val allRecords = mutableListOf<FlightRecord>()
+        
+        // Отправляем команду запроса оглавления ('M' / 0x4D)
+        port.write(byteArrayOf(0x4D.toByte()), 1000)
+        
+        val buffer = ByteArray(16384)
+        var noDataCounter = 0
+        
+        while (noDataCounter < 3) {
+            try {
+                val count = port.read(buffer, 5000)
+                logBytes("RX_TOC", buffer, count)
+                if (count > 0) {
+                    noDataCounter = 0
+                    val parsedRecords = tocParser.parse(buffer.copyOf(count))
+                    allRecords.addAll(parsedRecords)
+                    
+                    runOnUiThread {
+                        tvStatus.text = "Статус: Найдено включений в ЗБН: ${allRecords.size}..."
+                    }
+                } else {
+                    noDataCounter++
                 }
-            } else {
-                noDataCounter++
+            } catch (e: Exception) {
+                log("Ошибка во время чтения оглавления", e)
+                break
             }
-        } catch (e: Exception) {
-            log("Ошибка во время чтения оглавления", e)
-            break
         }
+        
+        log("Вычитывание завершено. Всего записей в ЗБН: ${allRecords.size}")
+        
+        return allRecords
+            .takeLast(limit)
+            .sortedByDescending { it.number }
     }
-    
-    log("Вычитывание завершено. Всего записей в ЗБН: ${allRecords.size}")
-    
-    // 3. Отбираем N последних записей и сортируем их
-    return allRecords
-        .takeLast(limit)
-        .sortedByDescending { it.number }
-}
-
 
     private fun copySelectedFlight() {
         val record = selectedRecord ?: return
@@ -697,15 +664,13 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
             var outputFile: File? = null
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-                val baud = prefs.getInt("baud_rate", 921600)
+                val baud = prefs.getInt("baud_rate", 115200)
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                 
-                // Исправление 1: Явный сброс сигналов RS-422
                 port.dtr = false
                 port.rts = false
 
-                // Исправление 2: Проверка ACK (0x06)
                 port.write(byteArrayOf(0x05), 1000)
                 val ack = ByteArray(1024)
                 val readAck = port.read(ack, 1000)
@@ -717,7 +682,6 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
                     resetUi()
                     return@launch
                 }
-
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
                 val dateFormatted = try {
                     val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
@@ -735,7 +699,6 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
                 var writtenBytes = 0L
                 var noDataCounter = 0
                 var lastUiUpdateTime = 0L
-
                 while (true) {
                     val count = port.read(buffer, 1000)
                     if (count > 0) {
@@ -767,7 +730,6 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
                             writtenBytes += bytesToWrite
                         }
 
-                        // Исправление 3: Ограничение обновлений UI не чаще 3 раз в секунду
                         val currentTime = System.currentTimeMillis()
                         if (currentTime - lastUiUpdateTime > 300) {
                             val currentWritten = writtenBytes
@@ -782,7 +744,6 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
                             }
                             lastUiUpdateTime = currentTime
                         }
-
                         if (bytesToRead != null && writtenBytes >= bytesToRead) break
                     } else {
                         noDataCounter++
@@ -850,7 +811,7 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
             val port = driver.ports[0]
             try {
                 val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
-                val baud = prefs.getInt("baud_rate", 921600)
+                val baud = prefs.getInt("baud_rate", 115200)
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                 port.dtr = false
@@ -868,7 +829,6 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
     }
 
     private fun downloadFullDump(port: UsbSerialPort) {
-        // Проверка рукопожатия перед дампом
         port.write(byteArrayOf(0x05), 1000)
         val ack = ByteArray(1024)
         val readAck = port.read(ack, 1000)
@@ -877,7 +837,6 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
             updateStatus("Статус: Сбой рукопожатия")
             return
         }
-
         port.write(byteArrayOf(0x4D.toByte()), 1000)
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val fileName = "ZBN_DUMP_$timeStamp"
@@ -886,20 +845,17 @@ private fun logBytes(tag: String, bytes: ByteArray, length: Int) {
         val outputFile = File(aircraftFolder, fileName)
         var fos: FileOutputStream? = null
         var lastUiUpdateTime = 0L
-
         try {
             fos = FileOutputStream(outputFile)
             val buffer = ByteArray(16384)
             var totalBytes = 0
             var noDataCounter = 0
-
             while (true) {
                 val count = port.read(buffer, 1000)
                 if (count > 0) {
                     fos.write(buffer, 0, count)
                     totalBytes += count
                     noDataCounter = 0
-
                     val currentTime = System.currentTimeMillis()
                     if (currentTime - lastUiUpdateTime > 300) {
                         val currentTotal = totalBytes
