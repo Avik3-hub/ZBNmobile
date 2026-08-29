@@ -2,6 +2,20 @@ package com.example.zbnreader
 
 import java.util.Locale
 
+/**
+ * Модель данных записи включения ЗБН
+ */
+data class FlightRecord(
+    val number: Int,
+    val sizeBytes: Long,
+    val date: String,
+    val duration: String,
+    val startTime: String,
+    val endTime: String,
+    val flightNum: String,
+    val tailNum: String
+)
+
 class ZbnTocParser {
 
     /**
@@ -12,7 +26,6 @@ class ZbnTocParser {
         val high = (v ushr 4) and 0x0F
         val low = v and 0x0F
 
-        // Если полубайт выходит за рамки BCD, заменяем на 0 для предотвращения крашей
         val safeHigh = if (high > 9) 0 else high
         val safeLow = if (low > 9) 0 else low
 
@@ -35,11 +48,86 @@ class ZbnTocParser {
     }
 
     /**
-     * 3. Метод для разбора оглавления (TOC)
+     * 3. Метод для разбора оглавления (TOC) накопителя ЗБН
      */
     fun parse(tocBytes: ByteArray): List<FlightRecord> {
         val records = mutableListOf<FlightRecord>()
-        // Логика разбора байтов оглавления под структуру вашего накопителя ЗБН
+        if (tocBytes.isEmpty()) return records
+
+        var i = 0
+        val recordSize = 32 // Размер одной кадровой структуры оглавления (32 байта)
+
+        while (i <= tocBytes.size - recordSize) {
+            val b0 = tocBytes[i].toInt() and 0xFF
+            val b1 = tocBytes[i + 1].toInt() and 0xFF
+
+            // Пропуск незаполненных/стертых секторов флеш-памяти (0xFF 0xFF)
+            if (b0 == 0xFF && b1 == 0xFF) {
+                i += recordSize
+                continue
+            }
+
+            // Поиск маркера синхронизации кадра (0x55 0xAA)
+            if (b0 == 0x55 && b1 == 0xAA) {
+                try {
+                    val frameIndex = tocBytes[i + 2].toInt() and 0xFF
+                    val recNum = tocBytes[i + 3].toInt() and 0xFF
+
+                    // Смещение/размер данных (4 байта little-endian)
+                    val offset = (tocBytes[i + 4].toLong() and 0xFF) or
+                            ((tocBytes[i + 5].toLong() and 0xFF) shl 8) or
+                            ((tocBytes[i + 6].toLong() and 0xFF) shl 16) or
+                            ((tocBytes[i + 7].toLong() and 0xFF) shl 24)
+
+                    // Дата: день, месяц, год (BCD)
+                    val day = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 8]))
+                    val month = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 9]))
+                    val year = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 10]))
+                    val dateStr = "$day.$month.$year"
+
+                    // Время начала: часы, минуты, секунды (BCD)
+                    val startH = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 11]))
+                    val startM = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 12]))
+                    val startS = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 13]))
+                    val startTimeStr = "$startH:$startM:$startS"
+
+                    // Время окончания: часы, минуты, секунды (BCD)
+                    val endH = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 14]))
+                    val endM = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 15]))
+                    val endS = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 16]))
+                    val endTimeStr = "$endH:$endM:$endS"
+
+                    // Длительность записи
+                    val durH = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 17]))
+                    val durM = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 18]))
+                    val durS = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 19]))
+                    val durationStr = "$durH:$durM:$durS"
+
+                    // Номер рейса и бортовой номер (BCD)
+                    val flightNumStr = bcdToString(tocBytes.copyOfRange(i + 20, i + 23)).trimStart('0').ifEmpty { "0" }
+                    val tailNumStr = bcdToString(tocBytes.copyOfRange(i + 23, i + 27)).trimStart('0').ifEmpty { "0" }
+
+                    records.add(
+                        FlightRecord(
+                            number = if (recNum > 0) recNum else frameIndex + 1,
+                            sizeBytes = offset,
+                            date = dateStr,
+                            duration = durationStr,
+                            startTime = startTimeStr,
+                            endTime = endTimeStr,
+                            flightNum = flightNumStr,
+                            tailNum = tailNumStr
+                        )
+                    )
+                    i += recordSize
+                } catch (_: Exception) {
+                    i++
+                }
+            } else {
+                i++
+            }
+        }
+
         return records
     }
 }
