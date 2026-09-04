@@ -2,84 +2,104 @@ package com.example.zbnreader
 
 import java.util.Locale
 
-/**
- * Модель записи оглавления ЗБН (16 байт на кадр)
- */
-data class FlightRecord(
-    val number: Int,
-    val startOffset: Long,
-    val endOffset: Long,
-    val sizeBytes: Long,
-    val date: String = "",
-    val duration: String = "",
-    val startTime: String = "",
-    val endTime: String = "",
-    val flightNum: String = "",
-    val tailNum: String = ""
-)
-
 class ZbnTocParser {
 
     /**
-     * Разбор 16-байтовых кадров оглавления (TOC)
+     * 1. Безопасное декодирование одного BCD-байта в целое число (0x93 -> 93)
+     */
+    fun bcdToInt(b: Byte): Int {
+        val v = b.toInt() and 0xFF
+        val high = (v ushr 4) and 0x0F
+        val low = v and 0x0F
+
+        val safeHigh = if (high > 9) 0 else high
+        val safeLow = if (low > 9) 0 else low
+
+        return safeHigh * 10 + safeLow
+    }
+
+    /**
+     * 2. Безопасное декодирование массива BCD-байтов в строку
+     */
+    fun bcdToString(bytes: ByteArray): String {
+        val sb = StringBuilder()
+        for (b in bytes) {
+            val v = b.toInt() and 0xFF
+            val high = (v ushr 4) and 0x0F
+            val low = v and 0x0F
+            sb.append(if (high > 9) 0 else high)
+            sb.append(if (low > 9) 0 else low)
+        }
+        return sb.toString()
+    }
+
+    /**
+     * 3. Метод для разбора оглавления (TOC) накопителя ЗБН
      */
     fun parse(tocBytes: ByteArray): List<FlightRecord> {
         val records = mutableListOf<FlightRecord>()
         if (tocBytes.isEmpty()) return records
 
-        val frameSize = 16
-
         var i = 0
-        while (i <= tocBytes.size - frameSize) {
-            // Пропуск незаполненных/стёртых секторов Flash (все байты FF)
-            var isEraseBlock = true
-            for (j in 0 until frameSize) {
-                if ((tocBytes[i + j].toInt() and 0xFF) != 0xFF) {
-                    isEraseBlock = false
-                    break
-                }
-            }
+        val recordSize = 32
 
-            if (isEraseBlock) {
-                i += frameSize
+        while (i <= tocBytes.size - recordSize) {
+            val b0 = tocBytes[i].toInt() and 0xFF
+            val b1 = tocBytes[i + 1].toInt() and 0xFF
+
+            // Пропуск незаполненных секторов (0xFF 0xFF)
+            if (b0 == 0xFF && b1 == 0xFF) {
+                i += recordSize
                 continue
             }
 
-            // Проверка сигнатуры кадра 0x55 0xAA на байтах 12 и 13
-            val marker1 = tocBytes[i + 12].toInt() and 0xFF
-            val marker2 = tocBytes[i + 13].toInt() and 0xFF
-
-            if (marker1 == 0x55 && marker2 == 0xAA) {
+            // Поиск маркера синхронизации кадра (0x55 0xAA)
+            if (b0 == 0x55 && b1 == 0xAA) {
                 try {
-                    // Начальное смещение (байты 2..4, Little-Endian)
-                    val startAddr = (tocBytes[i + 2].toLong() and 0xFF) or
-                            ((tocBytes[i + 3].toLong() and 0xFF) shl 8) or
-                            ((tocBytes[i + 4].toLong() and 0xFF) shl 16)
+                    val frameIndex = tocBytes[i + 2].toInt() and 0xFF
+                    val recNum = tocBytes[i + 3].toInt() and 0xFF
 
-                    // Конечное смещение (байты 8..10, Little-Endian)
-                    val endAddr = (tocBytes[i + 8].toLong() and 0xFF) or
-                            ((tocBytes[i + 9].toLong() and 0xFF) shl 8) or
-                            ((tocBytes[i + 10].toLong() and 0xFF) shl 16)
+                    val offset = (tocBytes[i + 4].toLong() and 0xFF) or
+                            ((tocBytes[i + 5].toLong() and 0xFF) shl 8) or
+                            ((tocBytes[i + 6].toLong() and 0xFF) shl 16) or
+                            ((tocBytes[i + 7].toLong() and 0xFF) shl 24)
 
-                    // Номер записи / индекс полета (байт 11)
-                    val recNum = tocBytes[i + 11].toInt() and 0xFF
+                    val day = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 8]))
+                    val month = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 9]))
+                    val year = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 10]))
+                    val dateStr = "$day.$month.$year"
 
-                    // Расчет размера записи
-                    val calculatedSize = if (endAddr >= startAddr) {
-                        endAddr - startAddr
-                    } else {
-                        0L
-                    }
+                    val startH = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 11]))
+                    val startM = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 12]))
+                    val startS = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 13]))
+                    val startTimeStr = "$startH:$startM:$startS"
+
+                    val endH = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 14]))
+                    val endM = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 15]))
+                    val endS = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 16]))
+                    val endTimeStr = "$endH:$endM:$endS"
+
+                    val durH = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 17]))
+                    val durM = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 18]))
+                    val durS = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 19]))
+                    val durationStr = "$durH:$durM:$durS"
+
+                    val flightNumStr = bcdToString(tocBytes.copyOfRange(i + 20, i + 23)).trimStart('0').ifEmpty { "0" }
+                    val tailNumStr = bcdToString(tocBytes.copyOfRange(i + 23, i + 27)).trimStart('0').ifEmpty { "0" }
 
                     records.add(
                         FlightRecord(
-                            number = recNum,
-                            startOffset = startAddr,
-                            endOffset = endAddr,
-                            sizeBytes = calculatedSize
+                            number = if (recNum > 0) recNum else frameIndex + 1,
+                            sizeBytes = offset,
+                            date = dateStr,
+                            duration = durationStr,
+                            startTime = startTimeStr,
+                            endTime = endTimeStr,
+                            flightNum = flightNumStr,
+                            tailNum = tailNumStr
                         )
                     )
-                    i += frameSize
+                    i += recordSize
                 } catch (_: Exception) {
                     i++
                 }
@@ -88,7 +108,6 @@ class ZbnTocParser {
             }
         }
 
-        // Сортировка записей ring-буфера по их порядковому номеру
-        return records.sortedBy { it.number }
+        return records
     }
 }
