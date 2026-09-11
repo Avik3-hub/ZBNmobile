@@ -4,114 +4,118 @@ import java.util.Locale
 
 class ZbnTocParser {
 
-    private fun bcdToInt(b: Byte): Int {
+    /**
+     * Декодирует BCD байт. Если байт пустой (0xFF), возвращает "1515" 
+     * для точного совпадения с багом отображения штатной программы ПК.
+     */
+    private fun parseBcdOr15(b: Byte): String {
         val v = b.toInt() and 0xFF
+        if (v == 0xFF) return "1515"
+        
         val high = (v ushr 4) and 0x0F
         val low = v and 0x0F
-
-        val safeHigh = if (high > 9) 0 else high
-        val safeLow = if (low > 9) 0 else low
-
-        return safeHigh * 10 + safeLow
+        
+        val hStr = if (high > 9) "0" else high.toString()
+        val lStr = if (low > 9) "0" else low.toString()
+        return "$hStr$lStr"
     }
 
-    private fun bcdToString(bytes: ByteArray): String {
+    private fun bcdToStringRaw(bytes: ByteArray): String {
         val sb = StringBuilder()
         for (b in bytes) {
             val v = b.toInt() and 0xFF
-            val high = (v ushr 4) and 0x0F
-            val low = v and 0x0F
-            // Игнорируем заполнители 0x0F / 15
-            if (high < 10) sb.append(high)
-            if (low < 10) sb.append(low)
-        }
-        return sb.toString()
-    }
-
-    fun calculateCrc16(bytes: ByteArray, offset: Int, length: Int): Int {
-        var crc = 0xFFFF
-        for (i in offset until (offset + length)) {
-            crc = crc xor (bytes[i].toInt() and 0xFF)
-            for (j in 0 until 8) {
-                crc = if ((crc and 0x0001) != 0) {
-                    (crc ushr 1) xor 0xA001
-                } else {
-                    crc ushr 1
-                }
+            if (v == 0xFF) {
+                sb.append("1515")
+            } else {
+                val high = (v ushr 4) and 0x0F
+                val low = v and 0x0F
+                sb.append(if (high > 9) "0" else high.toString())
+                sb.append(if (low > 9) "0" else low.toString())
             }
         }
-        return crc and 0xFFFF
+        return sb.toString()
     }
 
     fun parse(tocBytes: ByteArray): List<FlightRecord> {
         val records = mutableListOf<FlightRecord>()
         if (tocBytes.isEmpty()) return records
 
-        val recordSize = 16
+        // Истинный размер структуры записи оглавления ЗБН — 32 байта!
+        val recordSize = 32
         var i = 0
 
         while (i <= tocBytes.size - recordSize) {
             val b0 = tocBytes[i].toInt() and 0xFF
             val b1 = tocBytes[i + 1].toInt() and 0xFF
 
-            // Пропуск стертых секторов флеш-памяти (0xFF 0xFF)
+            // Пропуск неразмеченных/пустых блоков памяти (FF FF)
             if (b0 == 0xFF && b1 == 0xFF) {
                 i += recordSize
                 continue
             }
 
-            // Поиск маркер-синхронизации кадра (0x55 0xAA)
-            if (b0 == 0x55 && b1 == 0xAA) {
-                try {
-                    // Номер записи (байты 2, 3 - 16-bit Short)
-                    val recNum = (tocBytes[i + 2].toInt() and 0xFF) or
-                            ((tocBytes[i + 3].toInt() and 0xFF) shl 8)
+            try {
+                // 1. Номер записи (байты 0, 1 - 16-bit Little Endian)
+                val recNum = b0 or (b1 shl 8)
 
-                    // Размер записи в байтах (байты 4, 5, 6 - 24-bit Integer)
-                    val size = (tocBytes[i + 4].toLong() and 0xFF) or
-                            ((tocBytes[i + 5].toLong() and 0xFF) shl 8) or
-                            ((tocBytes[i + 6].toLong() and 0xFF) shl 16)
+                // 2. Размер файла (байты 2, 3, 4, 5 - 32-bit Integer)
+                val size = (tocBytes[i + 2].toLong() and 0xFF) or
+                        ((tocBytes[i + 3].toLong() and 0xFF) shl 8) or
+                        ((tocBytes[i + 4].toLong() and 0xFF) shl 16) or
+                        ((tocBytes[i + 5].toLong() and 0xFF) shl 24)
 
-                    // Дата: ДД.ММ.20ГГ (байты 7, 8, 9)
-                    val day = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 7]))
-                    val month = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 8]))
-                    val yearRaw = bcdToInt(tocBytes[i + 9])
-                    val dateStr = "$day.$month.20${String.format(Locale.US, "%02d", yearRaw)}"
+                // 3. Дата: ДД.ММ.ГГ (байты 6, 7, 8)
+                val d = parseBcdOr15(tocBytes[i + 6])
+                val m = parseBcdOr15(tocBytes[i + 7])
+                val y = parseBcdOr15(tocBytes[i + 8])
+                val dateStr = if (d == "1515") "1515.1515.1515" else "$d.$m.20$y"
 
-                    // Время начала записи: ЧЧ:ММ:СС (байты 10, 11)
-                    val startH = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 10]))
-                    val startM = String.format(Locale.US, "%02d", bcdToInt(tocBytes[i + 11]))
-                    val startTimeStr = "$startH:$startM:00"
+                // 4. ВремяЗап / Длительность (байты 9, 10, 11)
+                val durH = parseBcdOr15(tocBytes[i + 9])
+                val durM = parseBcdOr15(tocBytes[i + 10])
+                val durS = parseBcdOr15(tocBytes[i + 11])
+                val durationStr = if (durH == "1515") "00:00:00" else "$durH:$durM:$durS"
 
-                    // Рейс (байт 12)
-                    val flightNumStr = bcdToString(byteArrayOf(tocBytes[i + 12]))
-                        .trimStart('0')
-                        .ifEmpty { "0" }
+                // 5. Начало (байты 12, 13, 14)
+                val startH = parseBcdOr15(tocBytes[i + 12])
+                val startM = parseBcdOr15(tocBytes[i + 13])
+                val startS = parseBcdOr15(tocBytes[i + 14])
+                val startTimeStr = if (startH == "1515") "00:00:00" else "$startH:$startM:$startS"
 
-                    // Бортовой номер (байты 13, 14, 15)
-                    val tailNumStr = bcdToString(tocBytes.copyOfRange(i + 13, i + 16))
-                        .trimStart('0')
-                        .ifEmpty { "22963" }
+                // 6. Конец (байты 15, 16, 17)
+                val endH = parseBcdOr15(tocBytes[i + 15])
+                val endM = parseBcdOr15(tocBytes[i + 16])
+                val endS = parseBcdOr15(tocBytes[i + 17])
+                val endTimeStr = if (endH == "1515") "" else "$endH:$endM:$endS"
 
-                    records.add(
-                        FlightRecord(
-                            number = recNum,
-                            sizeBytes = size,
-                            date = dateStr,
-                            duration = "00:00:00",
-                            startTime = startTimeStr,
-                            endTime = "",
-                            flightNum = flightNumStr,
-                            tailNum = tailNumStr
-                        )
+                // 7. Рейс (байты 18, 19)
+                val flightNumStr = bcdToStringRaw(tocBytes.copyOfRange(i + 18, i + 20))
+                    .trimStart('0')
+                    .ifEmpty { "0" }
+
+                // 8. Борт (байты 20, 21, 22)
+                val tailNumStr = bcdToStringRaw(tocBytes.copyOfRange(i + 20, i + 23))
+                    .trimStart('0')
+                    .ifEmpty { "0" }
+
+                records.add(
+                    FlightRecord(
+                        number = recNum,
+                        sizeBytes = size,
+                        date = dateStr,
+                        duration = durationStr,
+                        startTime = startTimeStr,
+                        endTime = endTimeStr,
+                        flightNum = flightNumStr,
+                        tailNum = tailNumStr
                     )
-                    i += recordSize
-                } catch (_: Exception) {
-                    i++
-                }
-            } else {
-                i++
+                )
+            } catch (e: Exception) {
+                // Если кадр поврежден, пропускаем ошибку и идем дальше
             }
+
+            // Жесткий шаг к следующему 32-байтовому кадру
+            i += recordSize
         }
 
         return records
