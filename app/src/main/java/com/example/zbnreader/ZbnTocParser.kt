@@ -2,20 +2,6 @@ package com.example.zbnreader
 
 import java.util.Locale
 
-/**
- * Модель данных записи включения ЗБН
- */
-data class FlightRecord(
-    val number: Int,
-    val sizeBytes: Long,
-    val date: String,
-    val duration: String,
-    val startTime: String,
-    val endTime: String,
-    val flightNum: String,
-    val tailNum: String
-)
-
 class ZbnTocParser {
 
     /**
@@ -54,7 +40,7 @@ class ZbnTocParser {
         val records = mutableListOf<FlightRecord>()
         if (tocBytes.isEmpty()) return records
 
-        val recordSize = 16 // 16-байтовая кадровая структура оглавления ЗБН
+        val recordSize = 16
         var i = 0
 
         while (i <= tocBytes.size - recordSize) {
