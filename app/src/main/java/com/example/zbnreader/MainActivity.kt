@@ -534,12 +534,12 @@ class MainActivity : AppCompatActivity() {
                 
                 // 1. Отправка запроса ENQ
                 val enqPacket = byteArrayOf(0x05)
-                port.write(enqPacket, 1000)
+                port.write(enqPacket, 4000)
                 log("Отправка ENQ (0x05)...")
 
                 // 2. Чтение ответа с буфером с запасом для FTDI
                 val ackBuf = ByteArray(1024)
-                val readAck = port.read(ackBuf, 1000)
+                val readAck = port.read(ackBuf, 4000)
                 
                 logBytes("RX_ACK", ackBuf, readAck)
 
