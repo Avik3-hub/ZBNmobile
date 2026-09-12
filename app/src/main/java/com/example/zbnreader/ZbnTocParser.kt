@@ -2,7 +2,37 @@ package com.example.zbnreader
 
 class ZbnTocParser {
 
-    // ... (методы parseBcdOr15 и bcdToStringRaw оставляем без изменений) ...
+    /**
+     * Декодирует BCD байт. Если байт пустой (0xFF), возвращает "1515" 
+     * для точного совпадения с багом отображения штатной программы ПК.
+     */
+    private fun parseBcdOr15(b: Byte): String {
+        val v = b.toInt() and 0xFF
+        if (v == 0xFF) return "1515"
+        
+        val high = (v ushr 4) and 0x0F
+        val low = v and 0x0F
+        
+        val hStr = if (high > 9) "0" else high.toString()
+        val lStr = if (low > 9) "0" else low.toString()
+        return "$hStr$lStr"
+    }
+
+    private fun bcdToStringRaw(bytes: ByteArray): String {
+        val sb = StringBuilder()
+        for (b in bytes) {
+            val v = b.toInt() and 0xFF
+            if (v == 0xFF) {
+                sb.append("1515")
+            } else {
+                val high = (v ushr 4) and 0x0F
+                val low = v and 0x0F
+                sb.append(if (high > 9) "0" else high.toString())
+                sb.append(if (low > 9) "0" else low.toString())
+            }
+        }
+        return sb.toString()
+    }
 
     fun parse(tocBytes: ByteArray): List<FlightRecord> {
         val records = mutableListOf<FlightRecord>()
@@ -18,16 +48,12 @@ class ZbnTocParser {
             // Внутренний цикл: читаем записи по 32 байта внутри текущей страницы
             var recordOffset = 0
             while (recordOffset + recordSize <= pageSize) {
-                // Абсолютный индекс в массиве
                 val i = pageOffset + recordOffset
 
                 val b0 = tocBytes[i].toInt() and 0xFF
                 val b1 = tocBytes[i + 1].toInt() and 0xFF
 
-                // КЛЮЧЕВАЯ ПРАВКА: 
-                // Если мы наткнулись на пустоту (0xFF), значит полезные данные 
-                // на этой 512-байтной странице закончились (пошел паддинг).
-                // Делаем break, чтобы бросить эту страницу и сразу прыгнуть к следующей!
+                // Если пошел паддинг (0xFF), бросаем текущую страницу и переходим к следующей
                 if (b0 == 0xFF) {
                     break
                 }
@@ -89,14 +115,14 @@ class ZbnTocParser {
                         )
                     )
                 } catch (e: Exception) {
-                    // Если конкретный 32-байтный кадр битый, игнорируем его
+                    // Игнорируем битый кадр и идем дальше
                 }
 
                 // Шаг к следующей записи внутри страницы
                 recordOffset += recordSize
             }
 
-            // Жесткий шаг к следующему 512-байтному блоку, игнорируя весь мусор и паддинг
+            // Жесткий шаг к следующему 512-байтному блоку
             pageOffset += pageSize
         }
 
