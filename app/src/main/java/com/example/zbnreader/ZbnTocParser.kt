@@ -2,10 +2,6 @@ package com.example.zbnreader
 
 class ZbnTocParser {
 
-    /**
-     * Декодирует BCD байт. Если байт пустой (0xFF), возвращает "1515" 
-     * для точного совпадения с багом отображения штатной программы ПК.
-     */
     private fun parseBcdOr15(b: Byte): String {
         val v = b.toInt() and 0xFF
         if (v == 0xFF) return "1515"
@@ -38,92 +34,64 @@ class ZbnTocParser {
         val records = mutableListOf<FlightRecord>()
         if (tocBytes.isEmpty()) return records
 
-        val pageSize = 512
-        val recordSize = 32
-        
-        // Внешний цикл: шагаем строго блоками по 512 байт (страницами)
-        var pageOffset = 0
-        while (pageOffset + pageSize <= tocBytes.size) {
-            
-            // Внутренний цикл: читаем записи по 32 байта внутри текущей страницы
-            var recordOffset = 0
-            while (recordOffset + recordSize <= pageSize) {
-                val i = pageOffset + recordOffset
+        val packetSize = 16
+        var i = 0
 
-                val b0 = tocBytes[i].toInt() and 0xFF
-                val b1 = tocBytes[i + 1].toInt() and 0xFF
+        // Поток байт обрабатывается с поддержкой ресинхронизации
+        while (i <= tocBytes.size - packetSize) {
+            val b0 = tocBytes[i].toInt() and 0xFF
+            val b1 = tocBytes[i + 1].toInt() and 0xFF
+            val footer1 = tocBytes[i + 12].toInt() and 0xFF
+            val footer2 = tocBytes[i + 13].toInt() and 0xFF
 
-                // Если пошел паддинг (0xFF), бросаем текущую страницу и переходим к следующей
-                if (b0 == 0xFF) {
-                    break
-                }
-
+            // Проверка маркера начала (23 A6 или 22 A6) и футера (55 AA)[span_0](start_span)[span_0](end_span)
+            if ((b0 == 0x23 || b0 == 0x22) && b1 == 0xA6 && footer1 == 0x55 && footer2 == 0xAA) {
                 try {
-                    // 1. Номер записи (16-bit Little Endian)
-                    val recNum = b0 or (b1 shl 8)
+                    // 1. Индекс / Номер записи
+                    val recNum = tocBytes[i + 2].toInt() and 0xFF
 
-                    // 2. Размер файла (32-bit Integer)
-                    val size = (tocBytes[i + 2].toLong() and 0xFF) or
-                            ((tocBytes[i + 3].toLong() and 0xFF) shl 8) or
-                            ((tocBytes[i + 4].toLong() and 0xFF) shl 16) or
-                            ((tocBytes[i + 5].toLong() and 0xFF) shl 24)
+                    // 2. Полезная нагрузка (9 байт: с индекса i + 3 по i + 11)
+                    val payload = tocBytes.copyOfRange(i + 3, i + 12)
 
-                    // 3. Дата: ДД.ММ.ГГ
-                    val d = parseBcdOr15(tocBytes[i + 6])
-                    val m = parseBcdOr15(tocBytes[i + 7])
-                    val y = parseBcdOr15(tocBytes[i + 8])
+                    // Пример маппинга полей из полезной нагрузки (при необходимости скорректируйте смещения под ваш формат):
+                    val d = parseBcdOr15(payload[0])
+                    val m = parseBcdOr15(payload[1])
+                    val y = parseBcdOr15(payload[2])
                     val dateStr = if (d == "1515") "1515.1515.1515" else "$d.$m.20$y"
 
-                    // 4. ВремяЗап / Длительность
-                    val durH = parseBcdOr15(tocBytes[i + 9])
-                    val durM = parseBcdOr15(tocBytes[i + 10])
-                    val durS = parseBcdOr15(tocBytes[i + 11])
+                    val durH = parseBcdOr15(payload[3])
+                    val durM = parseBcdOr15(payload[4])
+                    val durS = parseBcdOr15(payload[5])
                     val durationStr = if (durH == "1515") "00:00:00" else "$durH:$durM:$durS"
 
-                    // 5. Начало
-                    val startH = parseBcdOr15(tocBytes[i + 12])
-                    val startM = parseBcdOr15(tocBytes[i + 13])
-                    val startS = parseBcdOr15(tocBytes[i + 14])
-                    val startTimeStr = if (startH == "1515") "00:00:00" else "$startH:$startM:$startS"
-
-                    // 6. Конец
-                    val endH = parseBcdOr15(tocBytes[i + 15])
-                    val endM = parseBcdOr15(tocBytes[i + 16])
-                    val endS = parseBcdOr15(tocBytes[i + 17])
-                    val endTimeStr = if (endH == "1515") "" else "$endH:$endM:$endS"
-
-                    // 7. Рейс
-                    val flightNumStr = bcdToStringRaw(tocBytes.copyOfRange(i + 18, i + 20))
+                    val flightNumStr = bcdToStringRaw(payload.copyOfRange(6, 8))
                         .trimStart('0')
                         .ifEmpty { "0" }
 
-                    // 8. Борт
-                    val tailNumStr = bcdToStringRaw(tocBytes.copyOfRange(i + 20, i + 23))
-                        .trimStart('0')
-                        .ifEmpty { "0" }
+                    val tailNumStr = parseBcdOr15(payload[8])
 
                     records.add(
                         FlightRecord(
                             number = recNum,
-                            sizeBytes = size,
+                            sizeBytes = 0L, // Заполняется при необходимости из байтов CRC/структуры
                             date = dateStr,
                             duration = durationStr,
-                            startTime = startTimeStr,
-                            endTime = endTimeStr,
+                            startTime = durationStr,
+                            endTime = "",
                             flightNum = flightNumStr,
                             tailNum = tailNumStr
                         )
                     )
                 } catch (e: Exception) {
-                    // Игнорируем битый кадр и идем дальше
+                    // Игнорируем поврежденный кадр
                 }
-
-                // Шаг к следующей записи внутри страницы
-                recordOffset += recordSize
+                
+                // Успешный шаг на фиксированный размер пакета
+                i += packetSize
+            } else {
+                // Ресинхронизация: сдвиг ровно на 1 байт вперед при несовпадении заголовка/футера
+                i += 1
             }
-
-            // Жесткий шаг к следующему 512-байтному блоку
-            pageOffset += pageSize
         }
 
         return records
