@@ -249,6 +249,15 @@ class MainActivity : AppCompatActivity() {
         log("Приложение запущено. Готовность к работе.")
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::mi171Pet.isInitialized) {
+            val enabled = getSharedPreferences("AppSettings", MODE_PRIVATE)
+                .getBoolean("mi171_pet_enabled", true)
+            mi171Pet.visibility = if (enabled) View.VISIBLE else View.GONE
+        }
+    }
+
     private fun getCustomUsbProber(): UsbSerialProber {
         val customTable = UsbSerialProber.getDefaultProbeTable()
         // Чип FTDI FT232RL
