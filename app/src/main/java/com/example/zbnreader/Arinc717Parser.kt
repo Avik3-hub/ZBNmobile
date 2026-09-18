@@ -93,9 +93,13 @@ class Arinc717Parser(
 
         while (searchBit + BITS_PER_WORD <= bitCount) {
             val sync = readWord(data, bitCount, searchBit) ?: break
-            val subframeNumber = getSubframeNumber(sync)
+            val subframeNumber: Int = getSubframeNumber(sync) ?: run {
+                searchBit++
+                -1
+            }
+            if (subframeNumber == -1) continue
 
-            if (subframeNumber == null || !hasExpectedNextSync(
+            if (!hasExpectedNextSync(
                     data,
                     bitCount,
                     searchBit,
@@ -111,7 +115,7 @@ class Arinc717Parser(
             // Decode all complete subframes in that chain without relying on a
             // fixed byte or nibble alignment.
             var currentBit = searchBit
-            var expectedSubframe = subframeNumber
+            var expectedSubframe: Int = subframeNumber
 
             while (currentBit + subframeBitCount <= bitCount) {
                 val currentSync = readWord(data, bitCount, currentBit) ?: break
