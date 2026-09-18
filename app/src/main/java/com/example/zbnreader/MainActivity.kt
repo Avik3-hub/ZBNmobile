@@ -65,6 +65,8 @@ class MainActivity : AppCompatActivity() {
     private var selectedRecord: FlightRecord? = null
     private var selectedRow: TableRow? = null
     private val tocParser = ZbnTocParser()
+    private var readingMetadata = false
+    private val flightCopyVerified = false
     private val downloadedRecordNumbers = mutableSetOf<Int>()
     private val errorRecordNumbers = mutableSetOf<Int>()
 
@@ -186,7 +188,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { executeFullDumpCommand() }
         }
         btnFullDump.layoutParams = btnParams
-        setCustomButtonState(btnFullDump, true, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+        setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
 
         btnExportExcel = Button(this).apply {
             text = "В Excel"
@@ -468,6 +470,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun selectRow(row: TableRow, record: FlightRecord) {
+        if (readingMetadata) return
         selectedRow?.let { prevRow ->
             val prevIndex = tableLayout.indexOfChild(prevRow) - 1
             if (prevIndex >= 0 && prevIndex < flightList.size) {
@@ -482,7 +485,7 @@ class MainActivity : AppCompatActivity() {
         selectedRow = row
         selectedRow?.setBackgroundColor(COLOR_SURFACE_CONTAINER)
         selectedRecord = record
-        setCustomButtonState(btnCopySelected, true, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+        setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         tvStatus.text = "Выбрано включение №${record.number}"
         log("Выбрана строка: Включение №${record.number}, Борт: ${record.tailNum}, Рейс: ${record.flightNum}")
     }
@@ -592,8 +595,15 @@ class MainActivity : AppCompatActivity() {
     val buffer = ByteArray(16384)
     val catalogBuffer = ByteArrayOutputStream()
     var noDataCounter = 0
+    var catalogComplete = true
+    val catalogDeadline = System.nanoTime() + 120_000_000_000L
 
     while (noDataCounter < 3) {
+        if (System.nanoTime() >= catalogDeadline || catalogBuffer.size() > 8 * 1024 * 1024) {
+            catalogComplete = false
+            log("Оглавление превысило ограничение времени или размера")
+            break
+        }
         try {
             val count = port.read(buffer, 5000)
             logBytes("RX_TOC", buffer, count)
@@ -610,6 +620,7 @@ class MainActivity : AppCompatActivity() {
                 noDataCounter += 1
             }
         } catch (e: Exception) {
+            catalogComplete = false
             log("Ошибка во время чтения оглавления", e)
             break
         }
@@ -622,12 +633,56 @@ class MainActivity : AppCompatActivity() {
             "Найдено включений: ${records.size}"
     )
 
-    // В дампе свежие включения имеют больший номер.
-    return records
+    val selected = records
         .sortedByDescending { it.number }
-        .take(limit)
+        .take(limit.coerceIn(0, 1000))
+        .toMutableList()
+    val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+    val rates = resources.getStringArray(R.array.reg_speeds)
+    val formats = resources.getStringArray(R.array.arinc_types)
+    val rate = rates.getOrNull(prefs.getInt("reg_speed", 0))
+    val format = formats.getOrNull(prefs.getInt("arinc", 0))
+    if (rate != "64" || format != "573") {
+        log("Декодер подписей проверен только для ARINC-573, 64 слова/с")
+        return selected.map { it.copy(duration = "—") }
+    }
+    if (!catalogComplete || catalogBuffer.size() % 16 != 0) {
+        log("Оглавление может быть неполным: запросы страниц не выполняются")
+        return selected
+    }
+    val reader = ZbnMetadataReader(port)
+    readingMetadata = true
+    try {
+        for (index in selected.indices) {
+            val record = selected[index]
+            updateStatus("Чтение подписей: ${index + 1}/${selected.size}, №${record.number}")
+            try {
+                val metadata = reader.read(record)
+                selected[index] = record.copy(
+                    date = metadata.date ?: "—",
+                    startTime = metadata.startTime ?: "—",
+                    flightNum = metadata.flightNum ?: "—",
+                    tailNum = metadata.tailNum ?: "—"
+                )
+                log("№${record.number}: дата=${metadata.date}, начало=${metadata.startTime}, " +
+                    "рейс=${metadata.flightNum}, борт=${metadata.tailNum}")
+            } catch (e: Exception) {
+                // Stop on an uncertain transaction; do not send further commands
+                // into an unfinished page response. Keep the catalog visible.
+                log("Подписи №${record.number} не получены. Чтение страниц остановлено", e)
+                break
+            }
+        }
+    } finally {
+        readingMetadata = false
+    }
+    return selected
 }
     private fun copySelectedFlight() {
+        if (!flightCopyVerified) {
+            log("Копирование заблокировано до проверки протокола сохранения")
+            return
+        }
         val record = selectedRecord ?: return
         val currentIndex = flightList.indexOf(record)
         val startOffset = record.sizeBytes
@@ -792,6 +847,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun executeFullDumpCommand() {
+        if (!flightCopyVerified) {
+            log("Полный дамп заблокирован: старая команда читает только оглавление")
+            return
+        }
         setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
         setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.isIndeterminate = true
@@ -984,7 +1043,7 @@ class MainActivity : AppCompatActivity() {
     private fun resetUi() {
         runOnUiThread {
             setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
-            setCustomButtonState(btnFullDump, true, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+            setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
             setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
             setCustomButtonState(btnExportExcel, flightList.isNotEmpty(), COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
             progressBar.visibility = View.GONE
