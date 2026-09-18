@@ -1,0 +1,19 @@
+{
+  "image": "mi171.png",
+  "width": 1536,
+  "height": 1872,
+  "cellWidth": 192,
+  "cellHeight": 208,
+  "columns": 8,
+  "animations": {
+    "idle": {"row":0,"frames":6,"durationsMs":[280,110,110,140,140,320]},
+    "moveRight": {"row":1,"frames":8,"durationsMs":[120,120,120,120,120,120,120,220]},
+    "moveLeft": {"row":2,"frames":8,"durationsMs":[120,120,120,120,120,120,120,220]},
+    "wave": {"row":3,"frames":4,"durationsMs":[140,140,140,280]},
+    "jump": {"row":4,"frames":5,"durationsMs":[140,140,140,140,280]},
+    "failed": {"row":5,"frames":8,"durationsMs":[140,140,140,140,140,140,140,240]},
+    "waiting": {"row":6,"frames":6,"durationsMs":[150,150,150,150,150,260]},
+    "working": {"row":7,"frames":6,"durationsMs":[120,120,120,120,120,220]},
+    "review": {"row":8,"frames":6,"durationsMs":[150,150,150,150,150,280]}
+  }
+}
