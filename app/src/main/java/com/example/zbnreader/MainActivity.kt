@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -585,42 +586,47 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
-        val allRecords = mutableListOf<FlightRecord>()
-        
-        // Отправляем команду запроса оглавления ('M' / 0x4D)
-        port.write(byteArrayOf(0x4D.toByte()), 1000)
-        
-        val buffer = ByteArray(16384)
-        var noDataCounter = 0
-        
-        while (noDataCounter < 3) {
-            try {
-                val count = port.read(buffer, 5000)
-                logBytes("RX_TOC", buffer, count)
-                if (count > 0) {
-                    noDataCounter = 0
-                    val parsedRecords = tocParser.parse(buffer.copyOf(count))
-                    allRecords.addAll(parsedRecords)
-                    
-                    runOnUiThread {
-                        tvStatus.text = "Статус: Найдено включений в ЗБН: ${allRecords.size}..."
-                    }
-                } else {
-                    noDataCounter++
+    // Команда выдачи оглавления.
+    port.write(byteArrayOf(0x4D.toByte()), 1000)
+
+    val buffer = ByteArray(16384)
+    val catalogBuffer = ByteArrayOutputStream()
+    var noDataCounter = 0
+
+    while (noDataCounter < 3) {
+        try {
+            val count = port.read(buffer, 5000)
+            logBytes("RX_TOC", buffer, count)
+
+            if (count > 0) {
+                noDataCounter = 0
+                catalogBuffer.write(buffer, 0, count)
+
+                runOnUiThread {
+                    tvStatus.text =
+                        "Статус: Получено оглавления: ${catalogBuffer.size()} байт..."
                 }
-            } catch (e: Exception) {
-                log("Ошибка во время чтения оглавления", e)
-                break
+            } else {
+                noDataCounter += 1
             }
+        } catch (e: Exception) {
+            log("Ошибка во время чтения оглавления", e)
+            break
         }
-        
-        log("Вычитывание завершено. Всего записей в ЗБН: ${allRecords.size}")
-        
-        return allRecords
-            .takeLast(limit)
-            .sortedByDescending { it.number }
     }
 
+    val records = tocParser.parse(catalogBuffer.toByteArray())
+
+    log(
+        "Вычитывание завершено. Получено байт: ${catalogBuffer.size()}. " +
+            "Найдено включений: ${records.size}"
+    )
+
+    // В дампе свежие включения имеют больший номер.
+    return records
+        .sortedByDescending { it.number }
+        .take(limit)
+}
     private fun copySelectedFlight() {
         val record = selectedRecord ?: return
         val currentIndex = flightList.indexOf(record)
