@@ -985,7 +985,7 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
             setCustomButtonState(btnFullDump, true, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
-            setCustomButtonState(btnCopySelected, selectedRecord != null, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+            setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
             setCustomButtonState(btnExportExcel, flightList.isNotEmpty(), COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
             progressBar.visibility = View.GONE
             progressBar.isIndeterminate = false
