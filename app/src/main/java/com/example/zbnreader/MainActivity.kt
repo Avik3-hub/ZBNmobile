@@ -60,7 +60,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnExportExcel: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var tableLayout: TableLayout
-    private lateinit var mi171Pet: Mi171PetView
 
     private val flightList = mutableListOf<FlightRecord>()
     private var selectedRecord: FlightRecord? = null
@@ -228,23 +227,7 @@ class MainActivity : AppCompatActivity() {
         logCard.addView(scrollViewLog)
         root.addView(logCard)
 
-        val screen = FrameLayout(this).apply {
-            addView(root, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            ))
-        }
-        mi171Pet = Mi171PetView(this).apply {
-            elevation = 12f
-        }
-        val petWidth = (96 * resources.displayMetrics.density).toInt()
-        val petHeight = (104 * resources.displayMetrics.density).toInt()
-        screen.addView(mi171Pet, FrameLayout.LayoutParams(petWidth, petHeight, Gravity.END or Gravity.BOTTOM).apply {
-            val margin = (12 * resources.displayMetrics.density).toInt()
-            setMargins(margin, margin, margin, margin)
-        })
-
-        setContentView(screen)
+        setContentView(root)
         renderTableHeader()
         log("Приложение запущено. Готовность к работе.")
     }
@@ -508,7 +491,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startReading() {
-        mi171Pet.play("working")
         setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
         setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.isIndeterminate = false
@@ -1055,14 +1037,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateStatus(text: String) {
-        runOnUiThread {
-            tvStatus.text = text
-            when {
-                text.contains("Ошибка", ignoreCase = true) ||
-                    text.contains("Сбой", ignoreCase = true) -> mi171Pet.play("failed", repeat = false)
-                text.contains("Загружено", ignoreCase = true) -> mi171Pet.play("review", repeat = false)
-            }
-        }
+        runOnUiThread { tvStatus.text = text }
     }
 
     private fun resetUi() {
@@ -1074,11 +1049,6 @@ class MainActivity : AppCompatActivity() {
             progressBar.visibility = View.GONE
             progressBar.isIndeterminate = false
             progressBar.progress = 0
-            if (!tvStatus.text.contains("Ошибка", ignoreCase = true) &&
-                !tvStatus.text.contains("Сбой", ignoreCase = true) &&
-                !tvStatus.text.contains("Загружено", ignoreCase = true)) {
-                mi171Pet.play("idle")
-            }
         }
     }
 }
