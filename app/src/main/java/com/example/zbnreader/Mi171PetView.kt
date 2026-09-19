@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Path
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -14,6 +16,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import org.json.JSONObject
 import kotlin.math.sin
+import kotlin.math.cos
 
 class Mi171PetView @JvmOverloads constructor(
     context: Context,
@@ -22,7 +25,8 @@ class Mi171PetView @JvmOverloads constructor(
     private data class Animation(val row: Int, val durationsMs: IntArray)
 
     private val atlas: Bitmap
-    private val rotor: Bitmap
+    private val bladePath = Path()
+    private val rotorPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val animations: Map<String, Animation>
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
@@ -40,11 +44,11 @@ class Mi171PetView @JvmOverloads constructor(
     private var dragging = false
     private var rotorSpinning = false
     private var rotorAngle = 0f
+    private var rotorStartedAt = 0L
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
     init {
         atlas = context.assets.open("mi171/mi171.png").use(BitmapFactory::decodeStream)
-        rotor = context.assets.open("mi171/mi171_rotor.png").use(BitmapFactory::decodeStream)
         val assetAnimations = context.assets.open("mi171/animations.json").bufferedReader().use { reader ->
             val root = JSONObject(reader.readText()).getJSONObject("animations")
             root.keys().asSequence().associateWith { name ->
@@ -94,24 +98,16 @@ class Mi171PetView @JvmOverloads constructor(
             // Корпус остаётся неподвижным, ротор рисуется отдельным слоем.
             val rotorHeight = 64
             source.set(0, rotorHeight, cellWidth, cellHeight)
-            val bob = sin(Math.toRadians(rotorAngle.toDouble() * 0.5)).toFloat() * 1.5f
+            val elapsed = (SystemClock.uptimeMillis() - rotorStartedAt) / 1000.0
+            val bob = sin(elapsed * Math.PI * 12.0).toFloat() * scale * 0.6f
             val bodyTop = destination.top + destination.height() * rotorHeight / cellHeight + bob
             val bodyDestination = RectF(destination.left, bodyTop, destination.right, destination.bottom + bob)
             canvas.drawBitmap(atlas, source, bodyDestination, paint)
 
-            val rotorWidth = destination.width() * 0.98f
-            val rotorDrawHeight = rotorWidth * rotor.height / rotor.width
-            val hubX = destination.centerX()
-            val hubY = destination.top + destination.height() * 0.22f + bob
-            val rotorDestination = RectF(
-                hubX - rotorWidth / 2f,
-                hubY - rotorDrawHeight / 2f,
-                hubX + rotorWidth / 2f,
-                hubY + rotorDrawHeight / 2f
-            )
             canvas.save()
-            canvas.rotate(rotorAngle, hubX, hubY)
-            canvas.drawBitmap(rotor, null, rotorDestination, paint)
+            canvas.translate(destination.left, destination.top + bob)
+            canvas.scale(scale, scale)
+            drawProjectedRotor(canvas)
             canvas.restore()
         } else {
             canvas.drawBitmap(atlas, source, destination, paint)
@@ -132,6 +128,58 @@ class Mi171PetView @JvmOverloads constructor(
                 paint.alpha = 255
             }
         }
+    }
+
+    // Coordinates are in the original 192 x 208 sprite cell. Rotate in the
+    // rotor's horizontal plane FIRST, then project its depth to screen Y.
+    private fun drawProjectedRotor(canvas: Canvas) {
+        val hubX = 98f
+        val hubY = 46f
+        val depthScale = 0.19f
+        val phase = Math.toRadians(rotorAngle.toDouble())
+
+        // Mast connects the stable body to the hub; it never rotates on screen.
+        rotorPaint.style = Paint.Style.STROKE
+        rotorPaint.strokeWidth = 4f
+        rotorPaint.color = Color.rgb(124, 133, 142)
+        canvas.drawLine(hubX, hubY, hubX, 68f, rotorPaint)
+
+        // Rear blades, fixed hub, then front blades: correct depth ordering.
+        for (front in listOf(false, true)) {
+            for (blade in 0 until 5) {
+                val angle = phase + blade * 2.0 * Math.PI / 5.0
+                if ((sin(angle) >= 0.0) != front) continue
+                val c = cos(angle).toFloat()
+                val s = sin(angle).toFloat()
+                fun vertex(radius: Float, chord: Float, first: Boolean = false) {
+                    val px = hubX + radius * c - chord * s
+                    val py = hubY + depthScale * (radius * s + chord * c)
+                    if (first) bladePath.moveTo(px, py) else bladePath.lineTo(px, py)
+                }
+                bladePath.reset()
+                vertex(7f, -2f, true)
+                vertex(84f, -3f)
+                vertex(86f, 2f)
+                vertex(18f, 4f)
+                vertex(7f, 2f)
+                bladePath.close()
+                rotorPaint.style = Paint.Style.FILL
+                rotorPaint.color = if (front) Color.rgb(66, 75, 83) else Color.rgb(47, 55, 64)
+                canvas.drawPath(bladePath, rotorPaint)
+                rotorPaint.style = Paint.Style.STROKE
+                rotorPaint.strokeWidth = 0.65f
+                rotorPaint.color = Color.rgb(167, 177, 185)
+                canvas.drawPath(bladePath, rotorPaint)
+            }
+            if (!front) {
+                rotorPaint.style = Paint.Style.FILL
+                rotorPaint.color = Color.rgb(172, 180, 186)
+                canvas.drawOval(hubX - 6f, hubY - 3f, hubX + 6f, hubY + 3f, rotorPaint)
+            }
+        }
+        rotorPaint.style = Paint.Style.FILL
+        rotorPaint.color = Color.rgb(213, 218, 221)
+        canvas.drawOval(hubX - 3f, hubY - 2f, hubX + 3f, hubY + 1f, rotorPaint)
     }
 
     fun play(name: String, repeat: Boolean = true) {
@@ -163,6 +211,7 @@ class Mi171PetView @JvmOverloads constructor(
                 if (!dragging && (dx * dx + dy * dy) > touchSlop * touchSlop) {
                     dragging = true
                     rotorSpinning = true
+                    rotorStartedAt = SystemClock.uptimeMillis()
                 }
                 if (dragging) {
                     val container = parent as? View ?: return true
@@ -208,7 +257,10 @@ class Mi171PetView @JvmOverloads constructor(
                 advanceFrame()
                 frameStartedAt = now
             }
-            if (rotorSpinning) rotorAngle = (rotorAngle + 14f) % 360f
+            if (rotorSpinning) {
+                // 0.8 revolutions/sec, independent of 60/90/120 Hz displays.
+                rotorAngle = (((now - rotorStartedAt) % 1250L) * 360f / 1250f)
+            }
             invalidate()
             postOnAnimation(this)
         }
