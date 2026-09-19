@@ -6,6 +6,8 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -40,6 +42,8 @@ class Mi171PetView @JvmOverloads constructor(
     private val animations: Map<String, Animation>
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
+    private val nextSource = Rect()
+    private val addBlend = PorterDuffXfermode(PorterDuff.Mode.ADD)
     private val destination = RectF()
     private val positionPrefs = context.getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
     private var animationName = "idle"
@@ -120,25 +124,35 @@ class Mi171PetView @JvmOverloads constructor(
             drawTailRotor(canvas, elapsed)
             drawProjectedRotor(canvas)
             canvas.restore()
+        } else if (animationName == "idle" || animationName == "waiting") {
+            drawSmoothRestFrame(canvas)
         } else {
             canvas.drawBitmap(atlas, source, destination, paint)
         }
+    }
 
-        // Последний idle-кадр мягко растворяется в первом: место стыка цикла
-        // больше не выглядит внезапным обрывом.
-        if (!rotorSpinning && animationName == "idle" && repeat && frame == animation.durationsMs.lastIndex) {
-            val duration = animation.durationsMs[frame]
-            val elapsed = (SystemClock.uptimeMillis() - frameStartedAt).toInt()
-            val blendDuration = minOf(180, duration)
-            val blend = ((elapsed - (duration - blendDuration)).toFloat() / blendDuration)
-                .coerceIn(0f, 1f)
-            if (blend > 0f) {
-                source.set(0, top, cellWidth, top + cellHeight)
-                paint.alpha = (255 * blend).toInt()
-                canvas.drawBitmap(atlas, source, destination, paint)
-                paint.alpha = 255
-            }
-        }
+    private fun drawSmoothRestFrame(canvas: Canvas) {
+        val nextFrame = if (frame < animation.durationsMs.lastIndex) frame + 1
+            else if (repeat) 0 else frame
+        val elapsed = SystemClock.uptimeMillis() - frameStartedAt
+        val progress = (elapsed.toFloat() / animation.durationsMs[frame]).coerceIn(0f, 1f)
+        // Smoothstep has zero velocity at both ends: no abrupt blend starts.
+        val blend = progress * progress * (3f - 2f * progress)
+        val nextAlpha = (blend * 255f).toInt()
+        nextSource.set(nextFrame * 192, animation.row * 208,
+            (nextFrame + 1) * 192, (animation.row + 1) * 208)
+
+        // Add weighted premultiplied pixels inside an isolated layer. Ordinary
+        // SRC_OVER leaves the old silhouette behind and dims opaque pixels.
+        val layer = canvas.saveLayer(destination, null)
+        paint.alpha = 255 - nextAlpha
+        canvas.drawBitmap(atlas, source, destination, paint)
+        paint.alpha = nextAlpha
+        paint.xfermode = addBlend
+        canvas.drawBitmap(atlas, nextSource, destination, paint)
+        paint.xfermode = null
+        paint.alpha = 255
+        canvas.restoreToCount(layer)
     }
 
     // Coordinates are in the original 192 x 208 sprite cell. Rotate in the
@@ -303,9 +317,19 @@ class Mi171PetView @JvmOverloads constructor(
         override fun run() {
             if (!isAttachedToWindow) return
             val now = SystemClock.uptimeMillis()
-            if (now - frameStartedAt >= animation.durationsMs[frame]) {
+            // Preserve elapsed time rather than discarding the remainder at
+            // each frame boundary. Skip complete loops after a long pause.
+            if (repeat) {
+                val cycleMs = animation.durationsMs.sum().toLong()
+                frameStartedAt += ((now - frameStartedAt) / cycleMs) * cycleMs
+            }
+            while (now - frameStartedAt >= animation.durationsMs[frame]) {
+                frameStartedAt += animation.durationsMs[frame]
                 advanceFrame()
-                frameStartedAt = now
+                if (repeat) {
+                    val cycleMs = animation.durationsMs.sum().toLong()
+                    frameStartedAt += ((now - frameStartedAt) / cycleMs) * cycleMs
+                }
             }
             if (rotorSpinning) {
                 // 1.6 revolutions/sec (twice the previous speed), independent of refresh rate.
