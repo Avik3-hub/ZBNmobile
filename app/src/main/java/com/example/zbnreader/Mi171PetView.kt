@@ -129,8 +129,13 @@ class Mi171PetView @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.rawX - downRawX
                 val dy = event.rawY - downRawY
-                if (!dragging && (dx * dx + dy * dy) > touchSlop * touchSlop) dragging = true
+                if (!dragging && (dx * dx + dy * dy) > touchSlop * touchSlop) {
+                    dragging = true
+                    play(if (dx < 0f) "moveLeft" else "moveRight")
+                }
                 if (dragging) {
+                    val movementAnimation = if (dx < 0f) "moveLeft" else "moveRight"
+                    if (animationName != movementAnimation) play(movementAnimation)
                     val container = parent as? View ?: return true
                     x = (downX + dx).coerceIn(0f, (container.width - width).coerceAtLeast(0).toFloat())
                     y = (downY + dy).coerceIn(0f, (container.height - height).coerceAtLeast(0).toFloat())
@@ -139,11 +144,17 @@ class Mi171PetView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
-                if (dragging) savePosition() else performClick()
+                if (dragging) {
+                    savePosition()
+                    play("idle")
+                } else {
+                    performClick()
+                }
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
+                if (dragging) play("idle")
                 return true
             }
         }
