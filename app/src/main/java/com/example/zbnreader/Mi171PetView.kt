@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import org.json.JSONObject
+import kotlin.math.sin
 
 class Mi171PetView @JvmOverloads constructor(
     context: Context,
@@ -21,6 +22,7 @@ class Mi171PetView @JvmOverloads constructor(
     private data class Animation(val row: Int, val durationsMs: IntArray)
 
     private val atlas: Bitmap
+    private val rotor: Bitmap
     private val animations: Map<String, Animation>
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
@@ -36,10 +38,13 @@ class Mi171PetView @JvmOverloads constructor(
     private var downX = 0f
     private var downY = 0f
     private var dragging = false
+    private var rotorSpinning = false
+    private var rotorAngle = 0f
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
     init {
         atlas = context.assets.open("mi171/mi171.png").use(BitmapFactory::decodeStream)
+        rotor = context.assets.open("mi171/mi171_rotor.png").use(BitmapFactory::decodeStream)
         val assetAnimations = context.assets.open("mi171/animations.json").bufferedReader().use { reader ->
             val root = JSONObject(reader.readText()).getJSONObject("animations")
             root.keys().asSequence().associateWith { name ->
@@ -48,7 +53,7 @@ class Mi171PetView @JvmOverloads constructor(
                 Animation(item.getInt("row"), IntArray(durations.length()) { durations.getInt(it) })
             }
         }
-        animations = assetAnimations + ("dragSpin" to Animation(0, IntArray(6) { 55 }))
+        animations = assetAnimations
         animation = requireNotNull(animations[animationName])
         contentDescription = "Анимированный помощник Ми-171"
         isClickable = true
@@ -85,26 +90,36 @@ class Mi171PetView @JvmOverloads constructor(
             (height + drawHeight) / 2f
         )
         paint.alpha = 255
-        if (animationName == "dragSpin") {
-            // Корпус берём из неподвижного idle-кадра, а верхнюю полосу —
-            // из быстро меняющихся кадров ротора. Так корпус не дёргается.
+        if (rotorSpinning) {
+            // Корпус остаётся неподвижным, ротор рисуется отдельным слоем.
             val rotorHeight = 64
             source.set(0, rotorHeight, cellWidth, cellHeight)
-            val bodyTop = destination.top + destination.height() * rotorHeight / cellHeight
-            val bodyDestination = RectF(destination.left, bodyTop, destination.right, destination.bottom)
+            val bob = sin(Math.toRadians(rotorAngle.toDouble() * 0.5)).toFloat() * 1.5f
+            val bodyTop = destination.top + destination.height() * rotorHeight / cellHeight + bob
+            val bodyDestination = RectF(destination.left, bodyTop, destination.right, destination.bottom + bob)
             canvas.drawBitmap(atlas, source, bodyDestination, paint)
 
-            source.set(left, 0, left + cellWidth, rotorHeight)
-            val rotorBottom = destination.top + destination.height() * rotorHeight / cellHeight
-            val rotorDestination = RectF(destination.left, destination.top, destination.right, rotorBottom)
-            canvas.drawBitmap(atlas, source, rotorDestination, paint)
+            val rotorWidth = destination.width() * 0.98f
+            val rotorDrawHeight = rotorWidth * rotor.height / rotor.width
+            val hubX = destination.centerX()
+            val hubY = destination.top + destination.height() * 0.22f + bob
+            val rotorDestination = RectF(
+                hubX - rotorWidth / 2f,
+                hubY - rotorDrawHeight / 2f,
+                hubX + rotorWidth / 2f,
+                hubY + rotorDrawHeight / 2f
+            )
+            canvas.save()
+            canvas.rotate(rotorAngle, hubX, hubY)
+            canvas.drawBitmap(rotor, null, rotorDestination, paint)
+            canvas.restore()
         } else {
             canvas.drawBitmap(atlas, source, destination, paint)
         }
 
         // Последний idle-кадр мягко растворяется в первом: место стыка цикла
         // больше не выглядит внезапным обрывом.
-        if (animationName == "idle" && repeat && frame == animation.durationsMs.lastIndex) {
+        if (!rotorSpinning && animationName == "idle" && repeat && frame == animation.durationsMs.lastIndex) {
             val duration = animation.durationsMs[frame]
             val elapsed = (SystemClock.uptimeMillis() - frameStartedAt).toInt()
             val blendDuration = minOf(180, duration)
@@ -147,7 +162,7 @@ class Mi171PetView @JvmOverloads constructor(
                 val dy = event.rawY - downRawY
                 if (!dragging && (dx * dx + dy * dy) > touchSlop * touchSlop) {
                     dragging = true
-                    play("dragSpin")
+                    rotorSpinning = true
                 }
                 if (dragging) {
                     val container = parent as? View ?: return true
@@ -160,6 +175,7 @@ class Mi171PetView @JvmOverloads constructor(
                 parent?.requestDisallowInterceptTouchEvent(false)
                 if (dragging) {
                     savePosition()
+                    rotorSpinning = false
                     play("idle")
                 } else {
                     performClick()
@@ -168,7 +184,10 @@ class Mi171PetView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_CANCEL -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
-                if (dragging) play("idle")
+                if (dragging) {
+                    rotorSpinning = false
+                    play("idle")
+                }
                 return true
             }
         }
@@ -189,6 +208,7 @@ class Mi171PetView @JvmOverloads constructor(
                 advanceFrame()
                 frameStartedAt = now
             }
+            if (rotorSpinning) rotorAngle = (rotorAngle + 14f) % 360f
             invalidate()
             postOnAnimation(this)
         }

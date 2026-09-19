@@ -513,7 +513,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startReading() {
-        mi171Pet.play("working")
+        mi171Pet.play("waiting")
         setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
         setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.isIndeterminate = false
