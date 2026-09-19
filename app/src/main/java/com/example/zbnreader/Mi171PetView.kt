@@ -40,7 +40,7 @@ class Mi171PetView @JvmOverloads constructor(
 
     init {
         atlas = context.assets.open("mi171/mi171.png").use(BitmapFactory::decodeStream)
-        animations = context.assets.open("mi171/animations.json").bufferedReader().use { reader ->
+        val assetAnimations = context.assets.open("mi171/animations.json").bufferedReader().use { reader ->
             val root = JSONObject(reader.readText()).getJSONObject("animations")
             root.keys().asSequence().associateWith { name ->
                 val item = root.getJSONObject(name)
@@ -48,6 +48,7 @@ class Mi171PetView @JvmOverloads constructor(
                 Animation(item.getInt("row"), IntArray(durations.length()) { durations.getInt(it) })
             }
         }
+        animations = assetAnimations + ("dragSpin" to Animation(0, IntArray(6) { 55 }))
         animation = requireNotNull(animations[animationName])
         contentDescription = "Анимированный помощник Ми-171"
         isClickable = true
@@ -84,7 +85,22 @@ class Mi171PetView @JvmOverloads constructor(
             (height + drawHeight) / 2f
         )
         paint.alpha = 255
-        canvas.drawBitmap(atlas, source, destination, paint)
+        if (animationName == "dragSpin") {
+            // Корпус берём из неподвижного idle-кадра, а верхнюю полосу —
+            // из быстро меняющихся кадров ротора. Так корпус не дёргается.
+            val rotorHeight = 64
+            source.set(0, rotorHeight, cellWidth, cellHeight)
+            val bodyTop = destination.top + destination.height() * rotorHeight / cellHeight
+            val bodyDestination = RectF(destination.left, bodyTop, destination.right, destination.bottom)
+            canvas.drawBitmap(atlas, source, bodyDestination, paint)
+
+            source.set(left, 0, left + cellWidth, rotorHeight)
+            val rotorBottom = destination.top + destination.height() * rotorHeight / cellHeight
+            val rotorDestination = RectF(destination.left, destination.top, destination.right, rotorBottom)
+            canvas.drawBitmap(atlas, source, rotorDestination, paint)
+        } else {
+            canvas.drawBitmap(atlas, source, destination, paint)
+        }
 
         // Последний idle-кадр мягко растворяется в первом: место стыка цикла
         // больше не выглядит внезапным обрывом.
@@ -131,11 +147,9 @@ class Mi171PetView @JvmOverloads constructor(
                 val dy = event.rawY - downRawY
                 if (!dragging && (dx * dx + dy * dy) > touchSlop * touchSlop) {
                     dragging = true
-                    play(if (dx < 0f) "moveLeft" else "moveRight")
+                    play("dragSpin")
                 }
                 if (dragging) {
-                    val movementAnimation = if (dx < 0f) "moveLeft" else "moveRight"
-                    if (animationName != movementAnimation) play(movementAnimation)
                     val container = parent as? View ?: return true
                     x = (downX + dx).coerceIn(0f, (container.width - width).coerceAtLeast(0).toFloat())
                     y = (downY + dy).coerceIn(0f, (container.height - height).coerceAtLeast(0).toFloat())
