@@ -26,6 +26,16 @@ class Mi171PetView @JvmOverloads constructor(
 
     private val atlas: Bitmap
     private val bladePath = Path()
+    // Remove only the painted tail blades from the fixed body during dragging.
+    // Coordinates are in the first 192 x 208 idle cell.
+    private val tailBladeMask = Path().apply {
+        moveTo(5f, 71f); lineTo(25f, 70f); lineTo(27f, 81f)
+        lineTo(5f, 84f); close()
+        moveTo(20f, 79f); lineTo(28f, 79f); lineTo(28f, 106f)
+        lineTo(18f, 106f); close()
+        moveTo(24f, 70f); lineTo(27f, 61f); lineTo(34f, 63f)
+        lineTo(30f, 73f); close()
+    }
     private val rotorPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val animations: Map<String, Animation>
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -100,13 +110,14 @@ class Mi171PetView @JvmOverloads constructor(
             source.set(0, rotorHeight, cellWidth, cellHeight)
             val elapsed = (SystemClock.uptimeMillis() - rotorStartedAt) / 1000.0
             val bob = sin(elapsed * Math.PI * 12.0).toFloat() * scale * 0.6f
-            val bodyTop = destination.top + destination.height() * rotorHeight / cellHeight + bob
-            val bodyDestination = RectF(destination.left, bodyTop, destination.right, destination.bottom + bob)
-            canvas.drawBitmap(atlas, source, bodyDestination, paint)
-
             canvas.save()
             canvas.translate(destination.left, destination.top + bob)
             canvas.scale(scale, scale)
+            canvas.save()
+            canvas.clipOutPath(tailBladeMask)
+            canvas.drawBitmap(atlas, source, RectF(0f, 64f, 192f, 208f), paint)
+            canvas.restore()
+            drawTailRotor(canvas, elapsed)
             drawProjectedRotor(canvas)
             canvas.restore()
         } else {
@@ -180,6 +191,45 @@ class Mi171PetView @JvmOverloads constructor(
         rotorPaint.style = Paint.Style.FILL
         rotorPaint.color = Color.rgb(213, 218, 221)
         canvas.drawOval(hubX - 3f, hubY - 2f, hubX + 3f, hubY + 1f, rotorPaint)
+    }
+
+    private fun drawTailRotor(canvas: Canvas, elapsed: Double) {
+        val hubX = 26f
+        val hubY = 76f
+        // Vertical rotor plane: narrow horizontal axis, full vertical axis.
+        // A 12-degree screen tilt follows the tail mast in the source sprite.
+        // This projection is deliberately different from the main rotor plane.
+        val phase = (elapsed * 3.2 * 2.0 * Math.PI) % (2.0 * Math.PI)
+        for (blade in 0 until 3) {
+            val angle = phase + blade * 2.0 * Math.PI / 3.0
+            val c = cos(angle).toFloat()
+            val s = sin(angle).toFloat()
+            fun section(inner: Float, outer: Float, color: Int) {
+                fun vertex(r: Float, chord: Float, first: Boolean = false) {
+                    val u = r * c - chord * s
+                    val v = r * s + chord * c
+                    val px = hubX + 0.489f * u + 0.208f * v
+                    val py = hubY + 0.104f * u - 0.978f * v
+                    if (first) bladePath.moveTo(px, py) else bladePath.lineTo(px, py)
+                }
+                bladePath.reset()
+                vertex(inner, -2f, true)
+                vertex(outer, -2.8f)
+                vertex(outer, 2.8f)
+                vertex(inner, 2f)
+                bladePath.close()
+                rotorPaint.style = Paint.Style.FILL
+                rotorPaint.color = color
+                canvas.drawPath(bladePath, rotorPaint)
+            }
+            section(3f, 27f, Color.rgb(222, 228, 231))
+            section(22f, 27f, Color.rgb(217, 54, 61))
+        }
+        // Stationary gearbox and hub cover the roots of all three blades.
+        rotorPaint.color = Color.rgb(40, 69, 94)
+        canvas.drawOval(hubX - 3f, hubY - 4f, hubX + 3f, hubY + 4f, rotorPaint)
+        rotorPaint.color = Color.rgb(163, 177, 187)
+        canvas.drawCircle(hubX, hubY, 1.4f, rotorPaint)
     }
 
     fun play(name: String, repeat: Boolean = true) {
@@ -258,8 +308,8 @@ class Mi171PetView @JvmOverloads constructor(
                 frameStartedAt = now
             }
             if (rotorSpinning) {
-                // 0.8 revolutions/sec, independent of 60/90/120 Hz displays.
-                rotorAngle = (((now - rotorStartedAt) % 1250L) * 360f / 1250f)
+                // 1.6 revolutions/sec (twice the previous speed), independent of refresh rate.
+                rotorAngle = (((now - rotorStartedAt) % 625L) * 360f / 625f)
             }
             invalidate()
             postOnAnimation(this)
