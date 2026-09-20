@@ -93,6 +93,21 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(0, 20, 0, 12)
         }
 
+        val petSize = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        val normalSize = RadioButton(this).apply {
+            id = View.generateViewId()
+            text = "Обычный"
+            setTextColor(COLOR_TEXT)
+        }
+        val smallSize = RadioButton(this).apply {
+            id = View.generateViewId()
+            text = "Маленький (примерно в 1,5 раза меньше)"
+            setTextColor(COLOR_TEXT)
+        }
+        petSize.addView(normalSize)
+        petSize.addView(smallSize)
+        petSize.check(if (prefs.getBoolean("mi171_pet_small", false)) smallSize.id else normalSize.id)
+
         // 3. Кнопка сохранения
         val btnSave = Button(this).apply {
             text = "СОХРАНИТЬ НАСТРОЙКИ"
@@ -112,6 +127,7 @@ class SettingsActivity : AppCompatActivity() {
                     putInt("reg_speed", spinnerRegSpeed.selectedItemPosition)
                     putInt("baud_rate", selectedBaud)
                     putBoolean("mi171_pet_enabled", switchPet.isChecked)
+                    putBoolean("mi171_pet_small", petSize.checkedRadioButtonId == smallSize.id)
                     apply()
                 }
 
@@ -144,6 +160,8 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(createLabel("Скорость обмена RS-422 (Бод):"))
         root.addView(spinnerBaudRate)
         root.addView(switchPet)
+        root.addView(createLabel("Размер помощника:"))
+        root.addView(petSize)
 
         val saveParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,

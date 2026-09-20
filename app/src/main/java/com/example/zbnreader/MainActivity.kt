@@ -395,6 +395,8 @@ class MainActivity : AppCompatActivity() {
         if (::mi171Pet.isInitialized) {
             val enabled = getSharedPreferences("AppSettings", MODE_PRIVATE)
                 .getBoolean("mi171_pet_enabled", true)
+            mi171Pet.setSmallSize(getSharedPreferences("AppSettings", MODE_PRIVATE)
+                .getBoolean("mi171_pet_small", false))
             mi171Pet.setPetEnabled(enabled)
             petSpeech.setHelperEnabled(enabled)
             refreshPetUsb()

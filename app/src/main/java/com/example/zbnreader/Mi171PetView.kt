@@ -6,8 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Path
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -43,8 +41,6 @@ class Mi171PetView @JvmOverloads constructor(
     private val animations: Map<String, Animation>
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val source = Rect()
-    private val nextSource = Rect()
-    private val addBlend = PorterDuffXfermode(PorterDuff.Mode.ADD)
     private val destination = RectF()
     private val positionPrefs = context.getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
     private var animationName = "idle"
@@ -52,6 +48,8 @@ class Mi171PetView @JvmOverloads constructor(
     private var frame = 0
     private var repeat = true
     private var frameStartedAt = SystemClock.uptimeMillis()
+    private val motionStartedAt = SystemClock.uptimeMillis()
+    private var gestureStartedAt = motionStartedAt
     private var downRawX = 0f
     private var downRawY = 0f
     private var downX = 0f
@@ -159,7 +157,7 @@ class Mi171PetView @JvmOverloads constructor(
             drawTailRotor(canvas, elapsed)
             drawProjectedRotor(canvas)
             canvas.restore()
-        } else if (animationName == "idle" || animationName == "waiting") {
+        } else if (animationName == "idle" || animationName == "waiting" || animationName == "wave") {
             drawSmoothRestFrame(canvas)
         } else {
             canvas.drawBitmap(atlas, source, destination, paint)
@@ -167,27 +165,36 @@ class Mi171PetView @JvmOverloads constructor(
     }
 
     private fun drawSmoothRestFrame(canvas: Canvas) {
-        val nextFrame = if (frame < animation.durationsMs.lastIndex) frame + 1
-            else if (repeat) 0 else frame
-        val elapsed = SystemClock.uptimeMillis() - frameStartedAt
-        val progress = (elapsed.toFloat() / animation.durationsMs[frame]).coerceIn(0f, 1f)
-        // Smoothstep has zero velocity at both ends: no abrupt blend starts.
-        val blend = progress * progress * (3f - 2f * progress)
-        val nextAlpha = (blend * 255f).toInt()
-        nextSource.set(nextFrame * 192, animation.row * 208,
-            (nextFrame + 1) * 192, (animation.row + 1) * 208)
-
-        // Add weighted premultiplied pixels inside an isolated layer. Ordinary
-        // SRC_OVER leaves the old silhouette behind and dims opaque pixels.
-        val layer = canvas.saveLayer(destination, null)
-        paint.alpha = 255 - nextAlpha
+        // One immutable silhouette: no blending, morphing, or scale changes.
+        source.set(0, 0, 192, 208)
+        val now = SystemClock.uptimeMillis()
+        val phase = ((now - motionStartedAt) % 3200L) * (2.0 * Math.PI / 3200.0)
+        val unit = destination.height() / 208f
+        val bob = sin(phase).toFloat() * 1.2f * unit
+        var tilt = sin(phase).toFloat() * 0.45f
+        if (animationName == "wave") {
+            val duration = animation.durationsMs.sum().toFloat()
+            val t = ((now - gestureStartedAt) / duration).coerceIn(0f, 1f)
+            val envelope = sin(Math.PI * t).let { it * it }
+            tilt += (sin(4.0 * Math.PI * t) * envelope * 3.0).toFloat()
+        }
+        canvas.save()
+        canvas.translate(0f, bob)
+        canvas.rotate(tilt, destination.centerX(), destination.centerY())
         canvas.drawBitmap(atlas, source, destination, paint)
-        paint.alpha = nextAlpha
-        paint.xfermode = addBlend
-        canvas.drawBitmap(atlas, nextSource, destination, paint)
-        paint.xfermode = null
-        paint.alpha = 255
-        canvas.restoreToCount(layer)
+        canvas.restore()
+    }
+
+    fun setSmallSize(small: Boolean) {
+        val ratio = if (small) 2f / 3f else 1f
+        val newWidth = (96f * resources.displayMetrics.density * ratio).toInt()
+        val newHeight = (104f * resources.displayMetrics.density * ratio).toInt()
+        val params = layoutParams ?: return
+        if (params.width == newWidth && params.height == newHeight) return
+        params.width = newWidth
+        params.height = newHeight
+        layoutParams = params
+        // Layout listener restores the normalized position using the new size.
     }
 
     // Coordinates are in the original 192 x 208 sprite cell. Rotate in the
@@ -288,6 +295,7 @@ class Mi171PetView @JvmOverloads constructor(
         animation = next
         frame = 0
         frameStartedAt = SystemClock.uptimeMillis()
+        gestureStartedAt = frameStartedAt
         this.repeat = repeat
         invalidate()
         if (isAttachedToWindow && isShown && windowVisibility == VISIBLE) postOnAnimation(animationTick)
