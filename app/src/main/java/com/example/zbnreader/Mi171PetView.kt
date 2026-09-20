@@ -16,6 +16,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import androidx.core.view.doOnLayout
 import org.json.JSONObject
 import kotlin.math.sin
 import kotlin.math.cos
@@ -75,12 +76,46 @@ class Mi171PetView @JvmOverloads constructor(
         animation = requireNotNull(animations[animationName])
         contentDescription = "Анимированный помощник Ми-171"
         isClickable = true
+        addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) {
+                restorePosition()
+            }
+        }
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        post {
-            restorePosition()
+        doOnLayout { restorePosition() }
+        refreshPlayback()
+    }
+
+    fun setPetEnabled(enabled: Boolean) {
+        // Keep the measured size and FrameLayout gravity anchor while hidden.
+        // GONE removes them from layout, invalidating drag translations.
+        visibility = if (enabled) VISIBLE else INVISIBLE
+        if (enabled) {
+            doOnLayout {
+                restorePosition()
+                refreshPlayback()
+                invalidate()
+            }
+        } else {
+            dragging = false
+            rotorSpinning = false
+            parent?.requestDisallowInterceptTouchEvent(false)
+        }
+        refreshPlayback()
+    }
+
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        refreshPlayback()
+    }
+
+    private fun refreshPlayback() {
+        removeCallbacks(animationTick)
+        if (isAttachedToWindow && isShown && windowVisibility == VISIBLE) {
+            frameStartedAt = SystemClock.uptimeMillis()
             postOnAnimation(animationTick)
         }
     }
@@ -255,7 +290,7 @@ class Mi171PetView @JvmOverloads constructor(
         frameStartedAt = SystemClock.uptimeMillis()
         this.repeat = repeat
         invalidate()
-        if (isAttachedToWindow) postOnAnimation(animationTick)
+        if (isAttachedToWindow && isShown && windowVisibility == VISIBLE) postOnAnimation(animationTick)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -315,7 +350,7 @@ class Mi171PetView @JvmOverloads constructor(
 
     private val animationTick = object : Runnable {
         override fun run() {
-            if (!isAttachedToWindow) return
+            if (!isAttachedToWindow || !isShown || windowVisibility != VISIBLE) return
             val now = SystemClock.uptimeMillis()
             // Preserve elapsed time rather than discarding the remainder at
             // each frame boundary. Skip complete loops after a long pause.

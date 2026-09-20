@@ -348,7 +348,7 @@ class MainActivity : AppCompatActivity() {
         if (::mi171Pet.isInitialized) {
             val enabled = getSharedPreferences("AppSettings", MODE_PRIVATE)
                 .getBoolean("mi171_pet_enabled", true)
-            mi171Pet.visibility = if (enabled) View.VISIBLE else View.GONE
+            mi171Pet.setPetEnabled(enabled)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (Environment.isExternalStorageManager()) {
