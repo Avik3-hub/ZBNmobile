@@ -25,6 +25,17 @@ class Mi171PetView @JvmOverloads constructor(
 ) : View(context, attrs) {
     private data class Animation(val row: Int, val durationsMs: IntArray)
 
+    private val greetingAtlas: Bitmap
+    private val greetingFrames = arrayOf(
+        Rect(23,88,417,432),
+        Rect(447,87,838,432),
+        Rect(865,86,1258,432),
+        Rect(1284,86,1676,432),
+        Rect(24,507,417,855),
+        Rect(447,507,839,855),
+        Rect(865,507,1258,854),
+        Rect(1286,507,1678,855)
+    )
     private val idleAtlas: Bitmap
     // Visible frame bounds in the generated sheet (transparent gutters differ).
     private val idleFrames = arrayOf(
@@ -59,8 +70,7 @@ class Mi171PetView @JvmOverloads constructor(
     private var frame = 0
     private var repeat = true
     private var frameStartedAt = SystemClock.uptimeMillis()
-    private val motionStartedAt = SystemClock.uptimeMillis()
-    private var gestureStartedAt = motionStartedAt
+    private var motionStartedAt = SystemClock.uptimeMillis()
     private var downRawX = 0f
     private var downRawY = 0f
     private var downX = 0f
@@ -74,6 +84,7 @@ class Mi171PetView @JvmOverloads constructor(
     init {
         atlas = context.assets.open("mi171/mi171.png").use(BitmapFactory::decodeStream)
         idleAtlas = context.assets.open("mi171/idle_v2.png").use(BitmapFactory::decodeStream)
+        greetingAtlas = context.assets.open("mi171/greeting_v2.png").use(BitmapFactory::decodeStream)
         val assetAnimations = context.assets.open("mi171/animations.json").bufferedReader().use { reader ->
             val root = JSONObject(reader.readText()).getJSONObject("animations")
             root.keys().asSequence().associateWith { name ->
@@ -82,7 +93,8 @@ class Mi171PetView @JvmOverloads constructor(
                 Animation(item.getInt("row"), IntArray(durations.length()) { durations.getInt(it) })
             }
         }
-        animations = assetAnimations
+        animations = assetAnimations + ("wave" to Animation(0,
+            intArrayOf(100, 110, 130, 120, 300, 130, 170, 140)))
         animation = requireNotNull(animations[animationName])
         contentDescription = "Анимированный помощник Ми-171"
         isClickable = true
@@ -188,17 +200,13 @@ class Mi171PetView @JvmOverloads constructor(
         val unit = destination.height() / 208f
         idleDestination.set(destination.left + 5f*unit, destination.top + 23f*unit,
             destination.left + 187f*unit, destination.top + 189f*unit)
-        canvas.save()
-        if (animationName == "wave") {
-            val duration = animation.durationsMs.sum().toFloat()
-            val t = ((now - gestureStartedAt) / duration).coerceIn(0f, 1f)
-            val envelope = sin(Math.PI * t).let { it * it }
-            val tilt = (sin(4.0 * Math.PI * t) * envelope * 3.0).toFloat()
-            canvas.rotate(tilt, destination.centerX(), destination.centerY())
+        if (animationName == "wave" && frame in 1..6) {
+            canvas.drawBitmap(greetingAtlas, greetingFrames[frame], idleDestination, paint)
+        } else {
+            // Greeting starts/ends with the exact resting image, at identical size.
+            val idleIndex = if (animationName == "wave") 0 else index
+            canvas.drawBitmap(idleAtlas, idleFrames[idleIndex], idleDestination, paint)
         }
-        // Actual generated blink frames. No cross-fade and no idle rocking.
-        canvas.drawBitmap(idleAtlas, idleFrames[index], idleDestination, paint)
-        canvas.restore()
     }
 
     fun setSmallSize(small: Boolean) {
@@ -311,7 +319,6 @@ class Mi171PetView @JvmOverloads constructor(
         animation = next
         frame = 0
         frameStartedAt = SystemClock.uptimeMillis()
-        gestureStartedAt = frameStartedAt
         this.repeat = repeat
         invalidate()
         if (isAttachedToWindow && isShown && windowVisibility == VISIBLE) postOnAnimation(animationTick)
@@ -406,6 +413,7 @@ class Mi171PetView @JvmOverloads constructor(
         } else if (repeat) {
             frame = 0
         } else {
+            if (animationName == "wave") motionStartedAt = SystemClock.uptimeMillis()
             animationName = "idle"
             animation = requireNotNull(animations[animationName])
             frame = 0
