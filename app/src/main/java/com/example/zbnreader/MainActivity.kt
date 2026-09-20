@@ -1,6 +1,9 @@
 package com.example.zbnreader
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -61,6 +64,42 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var tableLayout: TableLayout
     private lateinit var mi171Pet: Mi171PetView
+    private lateinit var petSpeech: PetSpeechView
+    private var observedUsbId: Int? = null
+    private var usbReceiverRegistered = false
+    private var catalogReadProblem = false
+    private val petUsbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            refreshPetUsb()
+        }
+    }
+
+    private fun petSay(text: String, urgent: Boolean = false, requiresUsb: Boolean = false) {
+        runOnUiThread {
+            if (::petSpeech.isInitialized && !isDestroyed && (!requiresUsb || observedUsbId != null)) petSpeech.say(text, urgent)
+        }
+    }
+
+    private fun refreshPetUsb() {
+        val manager = getSystemService(Context.USB_SERVICE) as UsbManager
+        val drivers = getCustomUsbProber().findAllDrivers(manager)
+        val old = observedUsbId
+        val device = drivers.firstOrNull { it.device.deviceId == old } ?: drivers.firstOrNull()
+        val id = device?.device?.deviceId
+        if (old == id) {
+            petSpeech.setConnected(id != null)
+            return
+        }
+        observedUsbId = id
+        petSpeech.setConnected(id != null)
+        if (id == null) petSay("Кабель отключён. Жду подключения", true)
+        else petSay("USB вижу. Жду ЗБН")
+    }
+
+    override fun onDestroy() {
+        if (usbReceiverRegistered) unregisterReceiver(petUsbReceiver)
+        super.onDestroy()
+    }
 
     private val flightList = mutableListOf<FlightRecord>()
     private var selectedRecord: FlightRecord? = null
@@ -244,6 +283,14 @@ class MainActivity : AppCompatActivity() {
             setMargins(margin, margin, margin, margin)
         })
 
+        petSpeech = PetSpeechView(this, mi171Pet).apply { elevation = 13f }
+        screen.addView(petSpeech, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        ContextCompat.registerReceiver(this, petUsbReceiver, IntentFilter().apply {
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }, ContextCompat.RECEIVER_EXPORTED)
+        usbReceiverRegistered = true
         setContentView(screen)
         renderTableHeader()
         log("Приложение запущено. Готовность к работе.")
@@ -349,6 +396,8 @@ class MainActivity : AppCompatActivity() {
             val enabled = getSharedPreferences("AppSettings", MODE_PRIVATE)
                 .getBoolean("mi171_pet_enabled", true)
             mi171Pet.setPetEnabled(enabled)
+            petSpeech.setHelperEnabled(enabled)
+            refreshPetUsb()
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (Environment.isExternalStorageManager()) {
@@ -514,6 +563,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startReading() {
         mi171Pet.play("waiting")
+        refreshPetUsb()
         setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
         setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.isIndeterminate = false
@@ -541,6 +591,7 @@ class MainActivity : AppCompatActivity() {
             val driver = findUsbDriver(usbManager)
             if (driver == null) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен или не опознан!")
+                petSay("Не вижу USB. Проверь адаптер и кабель", true)
                 updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
                 return@launch
@@ -548,6 +599,7 @@ class MainActivity : AppCompatActivity() {
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
                 log("Ошибка: Нет разрешения на использование USB!")
+                petSay("Нет доступа к USB. Разреши подключение", true)
                 updateStatus("Статус: Ошибка доступа к USB")
                 resetUi()
                 return@launch
@@ -573,6 +625,7 @@ class MainActivity : AppCompatActivity() {
                 // 3. Проверка результата
                 if (readAck == 0) {
                     log("Ошибка: Ответ от ЗБН не получен (таймаут, 0 байт)")
+                    petSay("ЗБН не отвечает. Проверь питание и подключение", true)
                     updateStatus("Статус: Сбой рукопожатия")
                     resetUi()
                     return@launch
@@ -580,8 +633,10 @@ class MainActivity : AppCompatActivity() {
                     val responseByte = ackBuf[0] 
                     if (responseByte == 0x06.toByte()) {
                         log("Успех: Получен ACK (0x06). Чтение оглавления...")
+                        petSay("Ищу полёты", requiresUsb = true)
                     } else {
                         log("Ошибка: Неверный ответ. Ожидался 0x06, получено: 0x${String.format("%02X", responseByte)}")
+                        petSay("ЗБН не отвечает. Проверь питание и подключение", true)
                         updateStatus("Статус: Сбой рукопожатия")
                         resetUi()
                         return@launch
@@ -594,6 +649,13 @@ class MainActivity : AppCompatActivity() {
                     flightList.addAll(records)
                     updateTableUI(flightList)
                 }
+                if (catalogReadProblem) {
+                    petSay("Не всё удалось прочитать. Проверь связь с ЗБН", true)
+                } else if (records.isEmpty()) {
+                    petSay("Записей полётов пока не нашёл")
+                } else {
+                    petSay("Полёты найдены! Записей: ${records.size}", requiresUsb = true)
+                }
                 if (records.isEmpty()) {
                     updateStatus("Статус: Оглавление пусто")
                     log("Оглавление пустое или не удалось распарсить записи.")
@@ -602,6 +664,7 @@ class MainActivity : AppCompatActivity() {
                     log("Успешно прочитано включений: ${records.size}")
                 }
             } catch (e: Exception) {
+                petSay("Не удалось прочитать ЗБН. Проверь связь", true)
                 log("Сбой процесса чтения оглавления", e)
                 updateStatus("Статус: Сбой передачи")
             } finally {
@@ -619,11 +682,13 @@ class MainActivity : AppCompatActivity() {
     val catalogBuffer = ByteArrayOutputStream()
     var noDataCounter = 0
     var catalogComplete = true
+    catalogReadProblem = false
     val catalogDeadline = System.nanoTime() + 120_000_000_000L
 
     while (noDataCounter < 3) {
         if (System.nanoTime() >= catalogDeadline || catalogBuffer.size() > 8 * 1024 * 1024) {
             catalogComplete = false
+            catalogReadProblem = true
             log("Оглавление превысило ограничение времени или размера")
             break
         }
@@ -644,11 +709,17 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             catalogComplete = false
+            catalogReadProblem = true
+            runOnUiThread {
+                petSpeech.setConnected(false)
+                petSay("Связь с ЗБН прервалась. Проверь кабель", true)
+            }
             log("Ошибка во время чтения оглавления", e)
             break
         }
     }
 
+    catalogReadProblem = catalogReadProblem || catalogBuffer.size() % 16 != 0
     val records = tocParser.parse(catalogBuffer.toByteArray())
 
     log(
@@ -692,6 +763,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 // Stop on an uncertain transaction; do not send further commands
                 // into an unfinished page response. Keep the catalog visible.
+                catalogReadProblem = true
                 log("Подписи №${record.number} не получены. Чтение страниц остановлено", e)
                 break
             }
@@ -703,6 +775,7 @@ class MainActivity : AppCompatActivity() {
 }
     private fun copySelectedFlight() {
         if (!flightCopyVerified) {
+            petSay("Скачивание пока недоступно: протокол ещё проверяется", true)
             log("Копирование заблокировано до проверки протокола сохранения")
             return
         }
@@ -730,6 +803,7 @@ class MainActivity : AppCompatActivity() {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val driver = findUsbDriver(usbManager)
             if (driver == null) {
+                petSay("Не вижу USB. Проверь кабель", true)
                 log("Ошибка скачивания: Конвертер USB не найден")
                 errorRecordNumbers.add(record.number)
                 runOnUiThread { updateTableUI(flightList) }
@@ -738,6 +812,7 @@ class MainActivity : AppCompatActivity() {
             }
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
+                petSay("Нет доступа к USB. Разреши подключение", true)
                 log("Ошибка скачивания: Нет прав USB")
                 errorRecordNumbers.add(record.number)
                 runOnUiThread { updateTableUI(flightList) }
@@ -761,11 +836,13 @@ class MainActivity : AppCompatActivity() {
                 if (readAck <= 0 || ack[0] != 0x06.toByte()) {
                     log("Ошибка скачивания: Накопитель не ответил на рукопожатие (ACK)")
                     errorRecordNumbers.add(record.number)
+                    petSay("ЗБН не отвечает. Проверь питание и подключение", true)
                     updateStatus("Статус: Сбой рукопожатия")
                     runOnUiThread { updateTableUI(flightList) }
                     resetUi()
                     return@launch
                 }
+                petSay("Скачиваю полёт №${record.number}")
                 port.write(byteArrayOf(0x4D.toByte()), 1000)
                 val dateFormatted = try {
                     val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
@@ -837,6 +914,7 @@ class MainActivity : AppCompatActivity() {
                 fos.flush()
                 fos.close()
                 if (bytesToRead != null && writtenBytes < bytesToRead) {
+                    petSay("Полёт №${record.number} получен не полностью. Проверь связь", true)
                     log("Ошибка: Передача прервана. Записано $writtenBytes из $bytesToRead байт.")
                     errorRecordNumbers.add(record.number)
                     updateStatus("Статус: Ошибка (Передача прервана)")
@@ -850,6 +928,11 @@ class MainActivity : AppCompatActivity() {
                     val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "573" }
                     val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "64" }
                     saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
+                    if (bytesToRead != null && bytesToRead > 0 && writtenBytes == bytesToRead) {
+                        petSay("Полёт №${record.number} скачан")
+                    } else {
+                        petSay("Данные сохранены, но полнота полёта №${record.number} не подтверждена", true)
+                    }
                     downloadedRecordNumbers.add(record.number)
                     errorRecordNumbers.remove(record.number)
                     log("Успешно сохранен рейс №${record.flightNum} ($writtenBytes байт)")
@@ -857,6 +940,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 runOnUiThread { updateTableUI(flightList) }
             } catch (e: Exception) {
+                petSay("Не удалось скачать полёт №${record.number}. Проверь связь и память", true)
                 log("Исключение при скачивании включения №${record.number}", e)
                 errorRecordNumbers.add(record.number)
                 updateStatus("Статус: Ошибка сбоя связи")
@@ -885,6 +969,7 @@ class MainActivity : AppCompatActivity() {
             val driver = findUsbDriver(usbManager)
             if (driver == null) {
                 log("Ошибка: USB-RS422 конвертер не обнаружен")
+                petSay("Не вижу USB. Проверь адаптер и кабель", true)
                 updateStatus("Статус: Ошибка (Нет адаптера)")
                 resetUi()
                 return@launch
@@ -892,6 +977,7 @@ class MainActivity : AppCompatActivity() {
             val connection = usbManager.openDevice(driver.device)
             if (connection == null) {
                 log("Ошибка: Нет доступа к USB при дампе")
+                petSay("Нет доступа к USB. Разреши подключение", true)
                 updateStatus("Статус: Ошибка доступа к USB")
                 resetUi()
                 return@launch
@@ -922,7 +1008,8 @@ class MainActivity : AppCompatActivity() {
         val readAck = port.read(ack, 1000)
         if (readAck <= 0 || ack[0] != 0x06.toByte()) {
             log("Ошибка дампа: ЗБН не ответил (ACK не получен)")
-            updateStatus("Статус: Сбой рукопожатия")
+            petSay("ЗБН не отвечает. Проверь питание и подключение", true)
+                    updateStatus("Статус: Сбой рукопожатия")
             return
         }
         port.write(byteArrayOf(0x4D.toByte()), 1000)
