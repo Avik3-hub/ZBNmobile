@@ -25,6 +25,17 @@ class Mi171PetView @JvmOverloads constructor(
 ) : View(context, attrs) {
     private data class Animation(val row: Int, val durationsMs: IntArray)
 
+    private val idleAtlas: Bitmap
+    // Visible frame bounds in the generated sheet (transparent gutters differ).
+    private val idleFrames = arrayOf(
+        Rect(25,94,418,429), Rect(448,93,838,429),
+        Rect(869,94,1261,429), Rect(1290,93,1681,429),
+        Rect(25,510,418,847), Rect(448,510,839,847),
+        Rect(869,510,1261,847), Rect(1290,510,1682,847)
+    )
+    private val idleDurations = longArrayOf(1700,120,60,60,90,60,60,400)
+    private val idleCycle = idleDurations.sum()
+    private val idleDestination = RectF()
     private val atlas: Bitmap
     private val bladePath = Path()
     // Remove only the painted tail blades from the fixed body during dragging.
@@ -62,6 +73,7 @@ class Mi171PetView @JvmOverloads constructor(
 
     init {
         atlas = context.assets.open("mi171/mi171.png").use(BitmapFactory::decodeStream)
+        idleAtlas = context.assets.open("mi171/idle_v2.png").use(BitmapFactory::decodeStream)
         val assetAnimations = context.assets.open("mi171/animations.json").bufferedReader().use { reader ->
             val root = JSONObject(reader.readText()).getJSONObject("animations")
             root.keys().asSequence().associateWith { name ->
@@ -165,23 +177,27 @@ class Mi171PetView @JvmOverloads constructor(
     }
 
     private fun drawSmoothRestFrame(canvas: Canvas) {
-        // One immutable silhouette: no blending, morphing, or scale changes.
-        source.set(0, 0, 192, 208)
         val now = SystemClock.uptimeMillis()
-        val phase = ((now - motionStartedAt) % 3200L) * (2.0 * Math.PI / 3200.0)
+        var elapsed = (now - motionStartedAt) % idleCycle
+        var index = 0
+        while (index < idleDurations.lastIndex && elapsed >= idleDurations[index]) {
+            elapsed -= idleDurations[index]
+            index++
+        }
+        // Same visible extent for every frame: no gutter-induced jumps.
         val unit = destination.height() / 208f
-        val bob = sin(phase).toFloat() * 1.2f * unit
-        var tilt = sin(phase).toFloat() * 0.45f
+        idleDestination.set(destination.left + 5f*unit, destination.top + 23f*unit,
+            destination.left + 187f*unit, destination.top + 189f*unit)
+        canvas.save()
         if (animationName == "wave") {
             val duration = animation.durationsMs.sum().toFloat()
             val t = ((now - gestureStartedAt) / duration).coerceIn(0f, 1f)
             val envelope = sin(Math.PI * t).let { it * it }
-            tilt += (sin(4.0 * Math.PI * t) * envelope * 3.0).toFloat()
+            val tilt = (sin(4.0 * Math.PI * t) * envelope * 3.0).toFloat()
+            canvas.rotate(tilt, destination.centerX(), destination.centerY())
         }
-        canvas.save()
-        canvas.translate(0f, bob)
-        canvas.rotate(tilt, destination.centerX(), destination.centerY())
-        canvas.drawBitmap(atlas, source, destination, paint)
+        // Actual generated blink frames. No cross-fade and no idle rocking.
+        canvas.drawBitmap(idleAtlas, idleFrames[index], idleDestination, paint)
         canvas.restore()
     }
 
