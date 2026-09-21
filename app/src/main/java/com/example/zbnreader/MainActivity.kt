@@ -721,8 +721,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    catalogReadProblem = catalogReadProblem || catalogBuffer.size() % 16 != 0
-    val records = tocParser.parse(catalogBuffer.toByteArray())
+    val rawCatalog = catalogBuffer.toByteArray()
+    val descriptorSize = ZbnTocParser.DESCRIPTOR_SIZE
+    val trailingByteCount = rawCatalog.size % descriptorSize
+    val lastDescriptorOffset = rawCatalog.size - 1 - descriptorSize
+    val lastDescriptorHasMarker =
+        lastDescriptorOffset >= 0 &&
+            rawCatalog[lastDescriptorOffset + 12] == 0x55.toByte() &&
+            rawCatalog[lastDescriptorOffset + 13] == 0xAA.toByte()
+    val lastDescriptorIsErased =
+        lastDescriptorOffset >= 0 &&
+            (lastDescriptorOffset until lastDescriptorOffset + descriptorSize)
+                .all { rawCatalog[it] == 0xFF.toByte() }
+    val hasKnownTerminator =
+        trailingByteCount == 1 &&
+            rawCatalog.last() == 0x5F.toByte() &&
+            (lastDescriptorHasMarker || lastDescriptorIsErased)
+    val catalogBytes = if (hasKnownTerminator) {
+        log("После полного оглавления получен служебный завершающий байт 0x5F")
+        rawCatalog.copyOf(rawCatalog.size - 1)
+    } else {
+        rawCatalog
+    }
+
+    catalogReadProblem =
+        catalogReadProblem || catalogBytes.size % descriptorSize != 0
+    val records = tocParser.parse(catalogBytes)
 
     log(
         "Вычитывание завершено. Получено байт: ${catalogBuffer.size()}. " +
@@ -742,7 +766,7 @@ class MainActivity : AppCompatActivity() {
         log("Декодер подписей проверен только для ARINC-573, 64 слова/с")
         return selected.map { it.copy(duration = "—") }
     }
-    if (!catalogComplete || catalogBuffer.size() % 16 != 0) {
+    if (!catalogComplete || catalogBytes.size % descriptorSize != 0) {
         log("Оглавление может быть неполным: запросы страниц не выполняются")
         return selected
     }
