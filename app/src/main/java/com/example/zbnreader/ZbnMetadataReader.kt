@@ -23,43 +23,66 @@ class ZbnMetadataReader(private val port: UsbSerialPort) {
             address.toByte(), (address ushr 8).toByte(),
             (address ushr 16).toByte(), 0x02)
         port.write(command, 1000)
-        val raw = ByteArray(16896)
-        // Keep the receive buffer large even for the final partial read.
+        val response = ByteArrayOutputStream()
+        // Different ZBN-1-3 revisions return either a complete 32-block
+        // transport page or a shorter raw ARINC stream terminated by silence.
         val chunk = ByteArray(4096)
         val chunkSizes = mutableListOf<Int>()
-        var received = 0
+        var emptyReads = 0
         val deadline = System.nanoTime() + 15_000_000_000L
-        while (received < raw.size) {
-            if (System.nanoTime() >= deadline)
+        while (response.size() < FIXED_PAGE_SIZE) {
+            if (System.nanoTime() >= deadline) {
+                if (response.size() > 0) break
                 throw IOException(
-                    describePartialResponse(raw, received, address, chunkSizes)
+                    describePartialResponse(
+                        response.toByteArray(),
+                        address,
+                        chunkSizes,
+                        FIXED_PAGE_SIZE
+                    )
                 )
+            }
             val count = port.read(chunk, 1000)
             if (count > 0) {
-                if (count > raw.size - received)
-                    throw IOException("Лишние данные страницы: принято $received + $count, ожидалось ${raw.size}")
-                chunk.copyInto(raw, received, 0, count)
-                received += count
+                if (response.size() + count > FIXED_PAGE_SIZE)
+                    throw IOException(
+                        "Лишние данные страницы: принято ${response.size()} + $count, " +
+                            "максимум $FIXED_PAGE_SIZE"
+                    )
+                response.write(chunk, 0, count)
                 chunkSizes.add(count)
+                emptyReads = 0
+            } else if (response.size() > 0) {
+                emptyReads++
+                if (emptyReads >= END_OF_RESPONSE_EMPTY_READS) break
             }
         }
-        // Observed end-of-transfer sequence; sent only after the full response.
+        val raw = response.toByteArray()
+        // Observed end-of-transfer sequence. Short raw replies also need it:
+        // otherwise the next ENQ can arrive while the ZBN is still in transfer.
         port.write(byteArrayOf(0x06, 0x05, 0x06), 1000)
-        return decodePage(raw, record.number, address)
+        return if (raw.size == FIXED_PAGE_SIZE) {
+            decodePage(raw, record.number, address)
+        } else {
+            // A short reply has no 16-byte transport descriptors. The decoder
+            // searches the bit-packed ARINC-573 stream for valid subframes.
+            ZbnMetadataDecoder().decode(raw)
+        }
     }
 
     private fun describePartialResponse(
         raw: ByteArray,
-        received: Int,
         address: Int,
-        chunkSizes: List<Int>
+        chunkSizes: List<Int>,
+        expected: Int
     ): String {
+        val received = raw.size
         val headEnd = minOf(received, DIAGNOSTIC_PREVIEW_BYTES)
         val tailStart = maxOf(0, received - DIAGNOSTIC_PREVIEW_BYTES)
         val head = raw.toHex(0, headEnd)
         val tail = raw.toHex(tailStart, received)
         val formattedAddress = address.toString(16).uppercase().padStart(6, '0')
-        return "Таймаут страницы: $received/${raw.size} байт; " +
+        return "Таймаут страницы: $received/$expected байт; " +
             "адрес=0x$formattedAddress; порции=$chunkSizes; " +
             "начало=[$head]; конец=[$tail]"
     }
@@ -71,9 +94,11 @@ class ZbnMetadataReader(private val port: UsbSerialPort) {
 
     companion object {
         private const val DIAGNOSTIC_PREVIEW_BYTES = 64
+        private const val FIXED_PAGE_SIZE = 16896
+        private const val END_OF_RESPONSE_EMPTY_READS = 3
 
         fun decodePage(raw: ByteArray, recordNumber: Int, address: Int): ZbnDecodedMetadata {
-            require(raw.size == 16896) { "Неполная страница ЗБН" }
+            require(raw.size == FIXED_PAGE_SIZE) { "Неполная страница ЗБН" }
             val payload = ByteArrayOutputStream()
             var started = false
             var ended = false
