@@ -773,11 +773,16 @@ class MainActivity : AppCompatActivity() {
         return selected
     }
     val reader = ZbnMetadataReader(port)
+    // Keep the table ordered newest-first, but read metadata oldest-first.
+    // Isolated service/anomalous record numbers sort above normal flight
+    // sequences and can time out; processing them last preserves metadata for
+    // the valid sequence already shown in the table.
+    val metadataOrder = selected.indices.sortedBy { selected[it].number }
     readingMetadata = true
     try {
-        for (index in selected.indices) {
+        for ((position, index) in metadataOrder.withIndex()) {
             val record = selected[index]
-            updateStatus("Чтение подписей: ${index + 1}/${selected.size}, №${record.number}")
+            updateStatus("Чтение подписей: ${position + 1}/${selected.size}, №${record.number}")
             try {
                 val metadata = reader.read(record)
                 selected[index] = record.copy(
