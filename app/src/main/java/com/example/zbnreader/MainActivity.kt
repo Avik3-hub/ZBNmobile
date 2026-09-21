@@ -564,6 +564,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startReading() {
+        mi171Pet.setBusy(true)
         mi171Pet.play("waiting")
         refreshPetUsb()
         setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
@@ -676,7 +677,7 @@ class MainActivity : AppCompatActivity() {
                     updateTableUI(flightList)
                 }
                 if (catalogReadProblem) {
-                    petSay("Не всё удалось прочитать. Проверь связь с ЗБН", true)
+                    petSay("Список получен, но не все подписи подтверждены. Сохрани лог", true)
                 } else if (records.isEmpty()) {
                     petSay("Записей полётов пока не нашёл")
                 } else {
@@ -687,7 +688,7 @@ class MainActivity : AppCompatActivity() {
                     log("Оглавление пустое или не удалось распарсить записи.")
                 } else {
                     updateStatus("Статус: Загружено ${records.size} включений")
-                    log("Успешно прочитано включений: ${records.size}")
+                    log("Прочитано включений: ${records.size}; подписи полностью подтверждены: ${!catalogReadProblem}")
                 }
             } catch (e: Exception) {
                 petSay("Не удалось прочитать ЗБН. Проверь связь", true)
@@ -743,7 +744,7 @@ class MainActivity : AppCompatActivity() {
             catalogComplete = false
             catalogReadProblem = true
             runOnUiThread {
-                petSpeech.setConnected(false)
+                refreshPetUsb()
                 petSay("Связь с ЗБН прервалась. Проверь кабель", true)
             }
             log("Ошибка во время чтения оглавления", e)
@@ -800,7 +801,7 @@ class MainActivity : AppCompatActivity() {
         log("Оглавление может быть неполным: запросы страниц не выполняются")
         return selected
     }
-    val reader = ZbnMetadataReader(port)
+    val reader = ZbnMetadataReader(port) { message -> log(message) }
     // Keep the table ordered newest-first, but read metadata oldest-first.
     // Isolated service/anomalous record numbers sort above normal flight
     // sequences and can time out; processing them last preserves metadata for
@@ -814,6 +815,11 @@ class MainActivity : AppCompatActivity() {
             try {
                 reopenPortForMetadata()
                 val metadata = reader.read(record)
+                if (metadata.date == null || metadata.startTime == null ||
+                    metadata.flightNum == null || metadata.tailNum == null) {
+                    catalogReadProblem = true
+                    log("№${record.number}: подписи не подтверждены полностью; прочерки не означают успешную расшифровку")
+                }
                 selected[index] = record.copy(
                     date = metadata.date ?: "—",
                     startTime = metadata.startTime ?: "—",
@@ -842,6 +848,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val record = selectedRecord ?: return
+        mi171Pet.setBusy(true)
         val currentIndex = flightList.indexOf(record)
         val startOffset = record.sizeBytes
         val bytesToRead: Long? = if (currentIndex >= 0 && currentIndex < flightList.size - 1) {
@@ -1020,6 +1027,7 @@ class MainActivity : AppCompatActivity() {
             log("Полный дамп заблокирован: старая команда читает только оглавление")
             return
         }
+        mi171Pet.setBusy(true)
         setCustomButtonState(btnStart, false, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
         setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.isIndeterminate = true
@@ -1221,6 +1229,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetUi() {
         runOnUiThread {
+            mi171Pet.setBusy(false)
             setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
             setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
             setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)

@@ -41,7 +41,7 @@ class PetSpeechView(context: Context, private val pet: View) : View(context) {
                 display(next)
             }
             invalidate()
-            if (now < until || now < laptopUntil || pending != null) postOnAnimation(this)
+            if (connected || now < until || now < laptopUntil || pending != null) postOnAnimation(this)
         }
     }
 
@@ -103,7 +103,7 @@ class PetSpeechView(context: Context, private val pet: View) : View(context) {
         if (!enabled || !pet.isShown || width == 0) return
         val now = SystemClock.uptimeMillis()
         val pad = 10f * density
-        if (now < laptopUntil) {
+        if (connected || now < laptopUntil) {
             val w = min(44f * density, width / 4f)
             val h = w * .65f
             val x = (if (pet.x >= w + pad) pet.x - w - pad else pet.x + pet.width + pad)
