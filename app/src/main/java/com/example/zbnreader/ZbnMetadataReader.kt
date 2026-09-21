@@ -12,23 +12,29 @@ class ZbnMetadataReader(private val port: UsbSerialPort) {
         // A fresh ENQ/ACK starts each page transaction. Never scan arbitrary
         // residual bytes for ACK: a stale catalog is not an acknowledgement.
         port.write(byteArrayOf(0x05), 1000)
-        val ack = ByteArray(1)
-        if (port.read(ack, 2000) != 1 || ack[0] != 0x06.toByte())
-            throw IOException("ЗБН не подтвердил запрос страницы")
+        // FTDI needs room for USB packets, even when only one payload byte
+        // is expected. Validate the returned length, not the buffer capacity.
+        val ack = ByteArray(4096)
+        val ackCount = port.read(ack, 2000)
+        if (ackCount != 1 || ack[0] != 0x06.toByte())
+            throw IOException("ЗБН не подтвердил запрос страницы (ACK: $ackCount байт)")
         val command = byteArrayOf(0x13, 0x02, address.toByte(),
             (address ushr 8).toByte(), (address ushr 16).toByte(), 0x02,
             address.toByte(), (address ushr 8).toByte(),
             (address ushr 16).toByte(), 0x02)
         port.write(command, 1000)
         val raw = ByteArray(16896)
+        // Keep the receive buffer large even for the final partial read.
+        val chunk = ByteArray(4096)
         var received = 0
         val deadline = System.nanoTime() + 15_000_000_000L
         while (received < raw.size) {
             if (System.nanoTime() >= deadline)
                 throw IOException("Таймаут страницы: $received/${raw.size} байт")
-            val chunk = ByteArray(minOf(4096, raw.size - received))
             val count = port.read(chunk, 1000)
             if (count > 0) {
+                if (count > raw.size - received)
+                    throw IOException("Лишние данные страницы: принято $received + $count, ожидалось ${raw.size}")
                 chunk.copyInto(raw, received, 0, count)
                 received += count
             }
