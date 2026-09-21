@@ -77,6 +77,7 @@ class Mi171PetView @JvmOverloads constructor(
     private var downY = 0f
     private var dragging = false
     private var rotorSpinning = false
+    private var busy = false
     private var rotorAngle = 0f
     private var rotorStartedAt = 0L
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
@@ -134,6 +135,12 @@ class Mi171PetView @JvmOverloads constructor(
         refreshPlayback()
     }
 
+    fun setBusy(value: Boolean) {
+        if (value && !busy && !rotorSpinning) rotorStartedAt = SystemClock.uptimeMillis()
+        busy = value
+        invalidate()
+    }
+
     private fun refreshPlayback() {
         removeCallbacks(animationTick)
         if (isAttachedToWindow && isShown && windowVisibility == VISIBLE) {
@@ -165,7 +172,7 @@ class Mi171PetView @JvmOverloads constructor(
             (height + drawHeight) / 2f
         )
         paint.alpha = 255
-        if (rotorSpinning) {
+        if (rotorSpinning || busy) {
             // Корпус остаётся неподвижным, ротор рисуется отдельным слоем.
             val rotorHeight = 64
             source.set(0, rotorHeight, cellWidth, cellHeight)
@@ -397,7 +404,7 @@ class Mi171PetView @JvmOverloads constructor(
                     frameStartedAt += ((now - frameStartedAt) / cycleMs) * cycleMs
                 }
             }
-            if (rotorSpinning) {
+            if (rotorSpinning || busy) {
                 // 1.6 revolutions/sec (twice the previous speed), independent of refresh rate.
                 rotorAngle = (((now - rotorStartedAt) % 625L) * 360f / 625f)
             }

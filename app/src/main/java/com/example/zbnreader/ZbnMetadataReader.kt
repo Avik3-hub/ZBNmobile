@@ -5,7 +5,10 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 
 /** Read-only metadata-page transaction observed in the supplied capture. */
-class ZbnMetadataReader(private val port: UsbSerialPort) {
+class ZbnMetadataReader(
+    private val port: UsbSerialPort,
+    private val diagnostic: (String) -> Unit = {}
+) {
     fun read(record: FlightRecord): ZbnDecodedMetadata {
         val address = record.startAddress
         require(address in 0..0xFFFFE0 && address and 31 == 0)
@@ -24,15 +27,13 @@ class ZbnMetadataReader(private val port: UsbSerialPort) {
             (address ushr 16).toByte(), 0x02)
         port.write(command, 1000)
         val response = ByteArrayOutputStream()
-        // Different ZBN-1-3 revisions return either a complete 32-block
-        // transport page or a shorter raw ARINC stream terminated by silence.
+        // Short responses are unverified: silence may also mean lost bytes.
         val chunk = ByteArray(4096)
         val chunkSizes = mutableListOf<Int>()
         var emptyReads = 0
         val deadline = System.nanoTime() + 15_000_000_000L
         while (response.size() < FIXED_PAGE_SIZE) {
             if (System.nanoTime() >= deadline) {
-                if (response.size() > 0) break
                 throw IOException(
                     describePartialResponse(
                         response.toByteArray(),
@@ -61,12 +62,19 @@ class ZbnMetadataReader(private val port: UsbSerialPort) {
         // Observed end-of-transfer sequence. Short raw replies also need it:
         // otherwise the next ENQ can arrive while the ZBN is still in transfer.
         port.write(byteArrayOf(0x06, 0x05, 0x06), 1000)
+        // Log only AFTER receiving: formatting HEX during USB reads can lose data.
+        diagnostic("META_RX №${record.number}: address=0x${address.toString(16)}, bytes=${raw.size}/$FIXED_PAGE_SIZE, chunks=$chunkSizes")
+        for (offset in raw.indices step 512) {
+            diagnostic("META_HEX №${record.number} offset=$offset: " +
+                raw.toHex(offset, minOf(offset + 512, raw.size)))
+        }
         return if (raw.size == FIXED_PAGE_SIZE) {
             decodePage(raw, record.number, address)
         } else {
-            // A short reply has no 16-byte transport descriptors. The decoder
-            // searches the bit-packed ARINC-573 stream for valid subframes.
-            ZbnMetadataDecoder().decode(raw)
+            val frames = Arinc717Parser().parseRawBytes(raw)
+            diagnostic("META_SHORT №${record.number}: ARINC subframes=${frames.size}; " +
+                "формат и принадлежность ответа не подтверждены, подписи не используются")
+            ZbnDecodedMetadata()
         }
     }
 
