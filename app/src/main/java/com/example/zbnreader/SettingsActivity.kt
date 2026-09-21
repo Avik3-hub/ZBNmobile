@@ -83,7 +83,7 @@ class SettingsActivity : AppCompatActivity() {
         val spinnerSysType = createCustomSpinner(R.array.system_types, prefs.getInt("system_type", 0))
         val spinnerArinc = createCustomSpinner(R.array.arinc_types, prefs.getInt("arinc", 0))
         val spinnerRegSpeed = createCustomSpinner(R.array.reg_speeds, prefs.getInt("reg_speed", 0))
-        val spinnerBaudRate = createCustomSpinner(R.array.baud_rates, getBaudRateIndex(prefs.getInt("baud_rate", 921600)))
+        val spinnerBaudRate = createCustomSpinner(R.array.baud_rates, getBaudRateIndex(prefs.getInt("baud_rate", 115200)))
 
         val switchPet = SwitchCompat(this).apply {
             text = "Показывать помощника Ми-171"
@@ -118,7 +118,7 @@ class SettingsActivity : AppCompatActivity() {
             setOnClickListener {
                 val limitVal = etLimit.text.toString().toIntOrNull() ?: 6
                 val baudRates = resources.getStringArray(R.array.baud_rates)
-                val selectedBaud = baudRates.getOrNull(spinnerBaudRate.selectedItemPosition)?.toIntOrNull() ?: 921600
+                val selectedBaud = baudRates.getOrNull(spinnerBaudRate.selectedItemPosition)?.toIntOrNull() ?: 115200
 
                 prefs.edit().apply {
                     putInt("limit", limitVal)
@@ -257,7 +257,7 @@ class SettingsActivity : AppCompatActivity() {
         val index = rates.indexOf(baudRate.toString())
         if (index >= 0) return index
         
-        val defaultIndex = rates.indexOf("921600")
+        val defaultIndex = rates.indexOf("115200")
         return if (defaultIndex >= 0) defaultIndex else 0
     }
 
