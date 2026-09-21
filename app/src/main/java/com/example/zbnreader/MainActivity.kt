@@ -696,12 +696,14 @@ class MainActivity : AppCompatActivity() {
         }
         try {
             val count = port.read(buffer, 5000)
-            logBytes("RX_TOC", buffer, count)
 
             if (count > 0) {
                 noDataCounter = 0
                 catalogBuffer.write(buffer, 0, count)
 
+                // The catalog is a continuous stream. Formatting every large
+                // block as HEX/ASCII here delays the next USB read and can
+                // overflow the FTDI receive path, dropping descriptor bytes.
                 runOnUiThread {
                     tvStatus.text =
                         "Статус: Получено оглавления: ${catalogBuffer.size()} байт..."
