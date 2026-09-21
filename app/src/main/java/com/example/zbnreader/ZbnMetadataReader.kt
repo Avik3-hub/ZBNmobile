@@ -26,17 +26,21 @@ class ZbnMetadataReader(private val port: UsbSerialPort) {
         val raw = ByteArray(16896)
         // Keep the receive buffer large even for the final partial read.
         val chunk = ByteArray(4096)
+        val chunkSizes = mutableListOf<Int>()
         var received = 0
         val deadline = System.nanoTime() + 15_000_000_000L
         while (received < raw.size) {
             if (System.nanoTime() >= deadline)
-                throw IOException("Таймаут страницы: $received/${raw.size} байт")
+                throw IOException(
+                    describePartialResponse(raw, received, address, chunkSizes)
+                )
             val count = port.read(chunk, 1000)
             if (count > 0) {
                 if (count > raw.size - received)
                     throw IOException("Лишние данные страницы: принято $received + $count, ожидалось ${raw.size}")
                 chunk.copyInto(raw, received, 0, count)
                 received += count
+                chunkSizes.add(count)
             }
         }
         // Observed end-of-transfer sequence; sent only after the full response.
@@ -44,7 +48,30 @@ class ZbnMetadataReader(private val port: UsbSerialPort) {
         return decodePage(raw, record.number, address)
     }
 
+    private fun describePartialResponse(
+        raw: ByteArray,
+        received: Int,
+        address: Int,
+        chunkSizes: List<Int>
+    ): String {
+        val headEnd = minOf(received, DIAGNOSTIC_PREVIEW_BYTES)
+        val tailStart = maxOf(0, received - DIAGNOSTIC_PREVIEW_BYTES)
+        val head = raw.toHex(0, headEnd)
+        val tail = raw.toHex(tailStart, received)
+        val formattedAddress = address.toString(16).uppercase().padStart(6, '0')
+        return "Таймаут страницы: $received/${raw.size} байт; " +
+            "адрес=0x$formattedAddress; порции=$chunkSizes; " +
+            "начало=[$head]; конец=[$tail]"
+    }
+
+    private fun ByteArray.toHex(start: Int, end: Int): String =
+        (start until end).joinToString(" ") {
+            (this[it].toInt() and 0xFF).toString(16).uppercase().padStart(2, '0')
+        }
+
     companion object {
+        private const val DIAGNOSTIC_PREVIEW_BYTES = 64
+
         fun decodePage(raw: ByteArray, recordNumber: Int, address: Int): ZbnDecodedMetadata {
             require(raw.size == 16896) { "Неполная страница ЗБН" }
             val payload = ByteArrayOutputStream()
