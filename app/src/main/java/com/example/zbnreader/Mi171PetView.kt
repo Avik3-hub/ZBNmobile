@@ -236,48 +236,107 @@ class Mi171PetView @JvmOverloads constructor(
         val depthScale = 0.19f
         val phase = Math.toRadians(rotorAngle.toDouble())
 
-        // Mast connects the stable body to the hub; it never rotates on screen.
-        rotorPaint.style = Paint.Style.STROKE
-        rotorPaint.strokeWidth = 4f
-        rotorPaint.color = Color.rgb(124, 133, 142)
-        canvas.drawLine(hubX, hubY, hubX, 68f, rotorPaint)
+        fun projectedPoint(angle: Double, radius: Float, chord: Float = 0f): Pair<Float, Float> {
+            val c = cos(angle).toFloat()
+            val s = sin(angle).toFloat()
+            return Pair(
+                hubX + radius * c - chord * s,
+                hubY + depthScale * (radius * s + chord * c)
+            )
+        }
 
-        // Rear blades, fixed hub, then front blades: correct depth ordering.
+        // Fixed mast and the non-rotating lower half of the swashplate.
+        rotorPaint.style = Paint.Style.STROKE
+        rotorPaint.strokeWidth = 5f
+        rotorPaint.color = Color.rgb(96, 108, 118)
+        canvas.drawLine(hubX, hubY + 3f, hubX, 68f, rotorPaint)
+        rotorPaint.style = Paint.Style.FILL
+        rotorPaint.color = Color.rgb(72, 82, 91)
+        canvas.save()
+        canvas.rotate(-4f, hubX, hubY + 13f)
+        canvas.drawOval(hubX - 12f, hubY + 10f, hubX + 12f, hubY + 16f, rotorPaint)
+        rotorPaint.style = Paint.Style.STROKE
+        rotorPaint.strokeWidth = 1.2f
+        rotorPaint.color = Color.rgb(184, 193, 199)
+        canvas.drawOval(hubX - 12f, hubY + 10f, hubX + 12f, hubY + 16f, rotorPaint)
+        canvas.restore()
+
+        // Upper swashplate rotates with the hub. Its five pitch links terminate
+        // at the blade grips and therefore follow the same phase as the rotor.
+        rotorPaint.style = Paint.Style.FILL
+        rotorPaint.color = Color.rgb(135, 145, 153)
+        canvas.drawOval(hubX - 10f, hubY + 7f, hubX + 10f, hubY + 12f, rotorPaint)
+
+        fun drawBladeAndGrip(angle: Double, front: Boolean) {
+            val c = cos(angle).toFloat()
+            val s = sin(angle).toFloat()
+            fun vertex(radius: Float, chord: Float, first: Boolean = false) {
+                val (px, py) = projectedPoint(angle, radius, chord)
+                if (first) bladePath.moveTo(px, py) else bladePath.lineTo(px, py)
+            }
+
+            // The hub sleeve and articulated grip occupy the inner radius.
+            val armStart = projectedPoint(angle, 5f)
+            val grip = projectedPoint(angle, 18f)
+            rotorPaint.style = Paint.Style.STROKE
+            rotorPaint.strokeCap = Paint.Cap.ROUND
+            rotorPaint.strokeWidth = 4.2f
+            rotorPaint.color = if (front) Color.rgb(121, 132, 140) else Color.rgb(87, 98, 107)
+            canvas.drawLine(armStart.first, armStart.second, grip.first, grip.second, rotorPaint)
+            rotorPaint.style = Paint.Style.FILL
+            rotorPaint.color = Color.rgb(181, 190, 196)
+            canvas.drawOval(grip.first - 2.7f, grip.second - 1.8f,
+                grip.first + 2.7f, grip.second + 1.8f, rotorPaint)
+
+            // Pitch link: lower end moves around the rotating swashplate, upper
+            // end follows the corresponding grip. A slight sideways offset
+            // keeps the rod visible next to the sleeve.
+            val lower = projectedPoint(angle, 7.5f, 1.5f)
+            val upper = projectedPoint(angle, 15f, 2.5f)
+            rotorPaint.style = Paint.Style.STROKE
+            rotorPaint.strokeCap = Paint.Cap.ROUND
+            rotorPaint.strokeWidth = 1.15f
+            rotorPaint.color = Color.rgb(218, 184, 92)
+            canvas.drawLine(lower.first, lower.second + 9f,
+                upper.first, upper.second + 1f, rotorPaint)
+
+            // Blade root begins after the articulated grip, not at the mast.
+            bladePath.reset()
+            vertex(16f, -2f, true)
+            vertex(84f, -3f)
+            vertex(86f, 2f)
+            vertex(21f, 4f)
+            vertex(16f, 2f)
+            bladePath.close()
+            rotorPaint.style = Paint.Style.FILL
+            rotorPaint.color = if (front) Color.rgb(66, 75, 83) else Color.rgb(47, 55, 64)
+            canvas.drawPath(bladePath, rotorPaint)
+            rotorPaint.style = Paint.Style.STROKE
+            rotorPaint.strokeCap = Paint.Cap.BUTT
+            rotorPaint.strokeWidth = 0.65f
+            rotorPaint.color = Color.rgb(167, 177, 185)
+            canvas.drawPath(bladePath, rotorPaint)
+        }
+
+        // Rear blades, central hub, then front blades preserve depth ordering.
         for (front in listOf(false, true)) {
             for (blade in 0 until 5) {
                 val angle = phase + blade * 2.0 * Math.PI / 5.0
                 if ((sin(angle) >= 0.0) != front) continue
-                val c = cos(angle).toFloat()
-                val s = sin(angle).toFloat()
-                fun vertex(radius: Float, chord: Float, first: Boolean = false) {
-                    val px = hubX + radius * c - chord * s
-                    val py = hubY + depthScale * (radius * s + chord * c)
-                    if (first) bladePath.moveTo(px, py) else bladePath.lineTo(px, py)
-                }
-                bladePath.reset()
-                vertex(7f, -2f, true)
-                vertex(84f, -3f)
-                vertex(86f, 2f)
-                vertex(18f, 4f)
-                vertex(7f, 2f)
-                bladePath.close()
-                rotorPaint.style = Paint.Style.FILL
-                rotorPaint.color = if (front) Color.rgb(66, 75, 83) else Color.rgb(47, 55, 64)
-                canvas.drawPath(bladePath, rotorPaint)
-                rotorPaint.style = Paint.Style.STROKE
-                rotorPaint.strokeWidth = 0.65f
-                rotorPaint.color = Color.rgb(167, 177, 185)
-                canvas.drawPath(bladePath, rotorPaint)
+                drawBladeAndGrip(angle, front)
             }
             if (!front) {
+                // Rotating hub body and cap sit between rear and front grips.
                 rotorPaint.style = Paint.Style.FILL
-                rotorPaint.color = Color.rgb(172, 180, 186)
-                canvas.drawOval(hubX - 6f, hubY - 3f, hubX + 6f, hubY + 3f, rotorPaint)
+                rotorPaint.color = Color.rgb(99, 110, 119)
+                canvas.drawOval(hubX - 8f, hubY - 4.5f, hubX + 8f, hubY + 4.5f, rotorPaint)
+                rotorPaint.color = Color.rgb(193, 201, 206)
+                canvas.drawOval(hubX - 5f, hubY - 3f, hubX + 5f, hubY + 2.5f, rotorPaint)
             }
         }
         rotorPaint.style = Paint.Style.FILL
         rotorPaint.color = Color.rgb(213, 218, 221)
-        canvas.drawOval(hubX - 3f, hubY - 2f, hubX + 3f, hubY + 1f, rotorPaint)
+        canvas.drawOval(hubX - 3.2f, hubY - 3.5f, hubX + 3.2f, hubY + 1f, rotorPaint)
     }
 
     private fun drawTailRotor(canvas: Canvas, elapsed: Double) {
