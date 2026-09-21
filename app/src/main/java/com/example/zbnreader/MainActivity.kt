@@ -645,7 +645,31 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                val records = readCatalog(port, sessionLimit)
+                val records = readCatalog(port, sessionLimit) {
+                    // The reference PC program starts every metadata request
+                    // in a fresh serial-port session.
+                    try {
+                        port.close()
+                    } catch (_: Exception) {
+                        // The next open below is the authoritative state check.
+                    }
+                    val metadataConnection = usbManager.openDevice(driver.device)
+                        ?: throw IllegalStateException("Нет доступа к USB для чтения подписей")
+                    try {
+                        port.open(metadataConnection)
+                    } catch (e: Exception) {
+                        metadataConnection.close()
+                        throw e
+                    }
+                    port.setParameters(
+                        currentBaudRate,
+                        8,
+                        UsbSerialPort.STOPBITS_1,
+                        UsbSerialPort.PARITY_NONE
+                    )
+                    port.dtr = false
+                    port.rts = false
+                }
                 runOnUiThread {
                     flightList.clear()
                     flightList.addAll(records)
@@ -676,7 +700,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun readCatalog(port: UsbSerialPort, limit: Int): List<FlightRecord> {
+    private fun readCatalog(
+        port: UsbSerialPort,
+        limit: Int,
+        reopenPortForMetadata: () -> Unit
+    ): List<FlightRecord> {
     // Команда выдачи оглавления.
     port.write(byteArrayOf(0x4D.toByte()), 1000)
 
@@ -784,6 +812,7 @@ class MainActivity : AppCompatActivity() {
             val record = selected[index]
             updateStatus("Чтение подписей: ${position + 1}/${selected.size}, №${record.number}")
             try {
+                reopenPortForMetadata()
                 val metadata = reader.read(record)
                 selected[index] = record.copy(
                     date = metadata.date ?: "—",
