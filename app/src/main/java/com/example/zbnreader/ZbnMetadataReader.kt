@@ -12,7 +12,23 @@ class ZbnMetadataReader(
     private val diagnostic: (String) -> Unit = {}
 ) {
     fun read(record: FlightRecord): ZbnDecodedMetadata {
-        val address = record.startAddress
+        val raw = readRawPage(record, record.startAddress, includeHexDump = true)
+        return if (raw.size == FIXED_PAGE_SIZE) {
+            decodePage(raw, record.number, record.startAddress)
+        } else {
+            val frames = Arinc717Parser().parseRawBytes(raw)
+            diagnostic("META_SHORT №${record.number}: ARINC subframes=${frames.size}; " +
+                "формат и принадлежность ответа не подтверждены, подписи не используются")
+            ZbnDecodedMetadata()
+        }
+    }
+
+    /** Reads one 32-sector page without changing anything in ZBN memory. */
+    fun readRawPage(
+        record: FlightRecord,
+        address: Int,
+        includeHexDump: Boolean = false
+    ): ByteArray {
         require(address in 0..0xFFFFE0 && address and 31 == 0)
         require(record.memoryBank in 1..2) { "Неизвестный банк памяти ЗБН" }
 
@@ -43,7 +59,7 @@ class ZbnMetadataReader(
             Thread.sleep(30)
             setBaudRate(metadataBaudRate)
             diagnostic("META_RX №${record.number}: скорость приёма $metadataBaudRate бод")
-            return readPage(record, address)
+            return readPage(record, address, includeHexDump)
         } finally {
             try {
                 setBaudRate(catalogBaudRate)
@@ -54,7 +70,11 @@ class ZbnMetadataReader(
         }
     }
 
-    private fun readPage(record: FlightRecord, address: Int): ZbnDecodedMetadata {
+    private fun readPage(
+        record: FlightRecord,
+        address: Int,
+        includeHexDump: Boolean
+    ): ByteArray {
         val response = ByteArrayOutputStream()
         // Short responses are unverified: silence may also mean lost bytes.
         val chunk = ByteArray(4096)
@@ -100,18 +120,13 @@ class ZbnMetadataReader(
         }
         // Log only AFTER receiving: formatting HEX during USB reads can lose data.
         diagnostic("META_RX №${record.number}: address=0x${address.toString(16)}, bytes=${raw.size}/$FIXED_PAGE_SIZE, chunks=$chunkSizes")
-        for (offset in raw.indices step 512) {
-            diagnostic("META_HEX №${record.number} offset=$offset: " +
-                raw.toHex(offset, minOf(offset + 512, raw.size)))
+        if (includeHexDump) {
+            for (offset in raw.indices step 512) {
+                diagnostic("META_HEX №${record.number} offset=$offset: " +
+                    raw.toHex(offset, minOf(offset + 512, raw.size)))
+            }
         }
-        return if (raw.size == FIXED_PAGE_SIZE) {
-            decodePage(raw, record.number, address)
-        } else {
-            val frames = Arinc717Parser().parseRawBytes(raw)
-            diagnostic("META_SHORT №${record.number}: ARINC subframes=${frames.size}; " +
-                "формат и принадлежность ответа не подтверждены, подписи не используются")
-            ZbnDecodedMetadata()
-        }
+        return raw
     }
 
     private fun setBaudRate(baudRate: Int) {
@@ -148,17 +163,25 @@ class ZbnMetadataReader(
         private const val END_OF_RESPONSE_EMPTY_READS = 3
 
         fun decodePage(raw: ByteArray, recordNumber: Int, address: Int): ZbnDecodedMetadata {
+            val payload = extractRecordPayload(raw, recordNumber, address)
+            require(payload.isNotEmpty()) { "В странице нет выбранного включения" }
+            // Already-stripped payload must not pass transport auto-detection.
+            return ZbnMetadataDecoder().decode(Arinc717Parser().parsePackedPayload(payload))
+        }
+
+        /** Returns only 512-byte data sectors belonging to the selected record. */
+        fun extractRecordPayload(
+            raw: ByteArray,
+            recordNumber: Int,
+            address: Int
+        ): ByteArray {
             require(raw.size == FIXED_PAGE_SIZE) { "Неполная страница ЗБН" }
             val payload = ByteArrayOutputStream()
-            var started = false
-            var ended = false
             repeat(32) { block ->
                 val offset = block * 528
                 val d = offset + 512
                 val erased = (d until d + 16).all { raw[it] == 0xFF.toByte() }
-                if (erased) {
-                    if (started) ended = true
-                } else {
+                if (!erased) {
                     require(raw[d + 12] == 0x55.toByte() && raw[d + 13] == 0xAA.toByte()) {
                         "Поврежден дескриптор страницы"
                     }
@@ -167,15 +190,11 @@ class ZbnMetadataReader(
                     require(actualAddress == address + block) { "Неверный адрес ответа ЗБН" }
                     val number = u(0) or (u(1) shl 8)
                     if (number == recordNumber) {
-                        require(!ended) { "Разрыв данных включения внутри страницы" }
                         payload.write(raw, offset, 512)
-                        started = true
-                    } else if (started) ended = true
+                    }
                 }
             }
-            require(started) { "В странице нет выбранного включения" }
-            // Already-stripped payload must not pass transport auto-detection.
-            return ZbnMetadataDecoder().decode(Arinc717Parser().parsePackedPayload(payload.toByteArray()))
+            return payload.toByteArray()
         }
     }
 }
