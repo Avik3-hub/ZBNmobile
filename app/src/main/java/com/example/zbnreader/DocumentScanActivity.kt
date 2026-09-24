@@ -116,19 +116,19 @@ class DocumentScanActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
             setBackgroundColor(Color.BLACK)
-            addView(reviewImage, LayoutParams(-1, 0, 1f))
+            addView(reviewImage, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(LinearLayout(this@DocumentScanActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(dp(12), dp(8), dp(12), dp(20))
                 addView(Button(context).apply {
                     text = "ПЕРЕСНЯТЬ"
                     setOnClickListener { showCamera() }
-                }, LayoutParams(0, dp(60), 1f).apply { marginEnd = dp(6) })
+                }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginEnd = dp(6) })
                 addView(Button(context).apply {
                     text = "СОХРАНИТЬ JPEG"
                     setOnClickListener { savePhoto() }
-                }, LayoutParams(0, dp(60), 1f).apply { marginStart = dp(6) })
-            }, LayoutParams(-1, -2))
+                }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginStart = dp(6) })
+            }, LinearLayout.LayoutParams(-1, -2))
         }
         root.addView(reviewPanel, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
