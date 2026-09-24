@@ -16,14 +16,12 @@ class ZbnMetadataReader(
         require(address in 0..0xFFFFE0 && address and 31 == 0)
         require(record.memoryBank in 1..2) { "Неизвестный банк памяти ЗБН" }
 
-        // The reference PC program opens the session at 115200 for the catalog,
-        // but switches to 921600 before the ENQ of every metadata page.
-        setBaudRate(metadataBaudRate)
+        // The reference PC program performs ENQ/ACK and sends the page command
+        // at the catalog speed. Only the 16896-byte response uses high speed.
         diagnostic(
-            "META_TX №${record.number}: baud=$metadataBaudRate, " +
+            "META_TX №${record.number}: handshake=$catalogBaudRate, " +
                 "address=0x${address.toString(16)}, bank=${record.memoryBank}"
         )
-        Thread.sleep(100)
         try {
             // A fresh ENQ/ACK starts each page transaction. Never scan arbitrary
             // residual bytes for ACK: a stale catalog is not an acknowledgement.
@@ -39,7 +37,12 @@ class ZbnMetadataReader(
                 (address ushr 8).toByte(), (address ushr 16).toByte(), bank,
                 address.toByte(), (address ushr 8).toByte(),
                 (address ushr 16).toByte(), bank)
+            // PCAP: ACK -> 94 ms -> command -> 31 ms -> high baud.
+            Thread.sleep(90)
             port.write(command, 1000)
+            Thread.sleep(30)
+            setBaudRate(metadataBaudRate)
+            diagnostic("META_RX №${record.number}: скорость приёма $metadataBaudRate бод")
             return readPage(record, address)
         } finally {
             try {
@@ -87,6 +90,8 @@ class ZbnMetadataReader(
         val raw = response.toByteArray()
         // Observed end-of-transfer sequence. Short raw replies also need it:
         // otherwise the next ENQ can arrive while the ZBN is still in transfer.
+        // PCAP switches back to 115200 before this sequence and its final ACK.
+        setBaudRate(catalogBaudRate)
         port.write(byteArrayOf(0x06, 0x05, 0x06), 1000)
         val finalAck = ByteArray(4096)
         val finalAckCount = port.read(finalAck, 1000)
