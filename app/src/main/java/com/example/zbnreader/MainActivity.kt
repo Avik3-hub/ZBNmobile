@@ -280,8 +280,11 @@ class MainActivity : AppCompatActivity() {
         val petWidth = (96 * resources.displayMetrics.density).toInt()
         val petHeight = (104 * resources.displayMetrics.density).toInt()
         screen.addView(mi171Pet, FrameLayout.LayoutParams(petWidth, petHeight, Gravity.END or Gravity.BOTTOM).apply {
-            val margin = (12 * resources.displayMetrics.density).toInt()
-            setMargins(margin, margin, margin, margin)
+            val sideMargin = (12 * resources.displayMetrics.density).toInt()
+            // Keep the first-launch position above the action buttons. A position
+            // chosen by dragging is still restored and may be anywhere on screen.
+            val defaultBottomMargin = (160 * resources.displayMetrics.density).toInt()
+            setMargins(sideMargin, sideMargin, sideMargin, defaultBottomMargin)
         })
 
         petSpeech = PetSpeechView(this, mi171Pet).apply { elevation = 13f }
