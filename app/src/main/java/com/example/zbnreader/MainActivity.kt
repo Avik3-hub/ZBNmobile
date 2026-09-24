@@ -646,7 +646,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                val records = readCatalog(port, sessionLimit) {
+                val records = readCatalog(port, sessionLimit, currentBaudRate) {
                     // The reference PC program starts every metadata request
                     // in a fresh serial-port session.
                     try {
@@ -704,6 +704,7 @@ class MainActivity : AppCompatActivity() {
     private fun readCatalog(
         port: UsbSerialPort,
         limit: Int,
+        catalogBaudRate: Int,
         reopenPortForMetadata: () -> Unit
     ): List<FlightRecord> {
     // Команда выдачи оглавления.
@@ -788,6 +789,11 @@ class MainActivity : AppCompatActivity() {
         .sortedByDescending { it.number }
         .take(limit.coerceIn(0, 1000))
         .toMutableList()
+    log(
+        "Выбраны включения: " + selected.joinToString { record ->
+            "№${record.number}@0x${record.startAddress.toString(16)} банк=${record.memoryBank}"
+        }
+    )
     val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
     val rates = resources.getStringArray(R.array.reg_speeds)
     val formats = resources.getStringArray(R.array.arinc_types)
@@ -801,7 +807,11 @@ class MainActivity : AppCompatActivity() {
         log("Оглавление может быть неполным: запросы страниц не выполняются")
         return selected
     }
-    val reader = ZbnMetadataReader(port) { message -> log(message) }
+    val reader = ZbnMetadataReader(
+        port = port,
+        catalogBaudRate = catalogBaudRate,
+        metadataBaudRate = 921600
+    ) { message -> log(message) }
     // Keep the table ordered newest-first, but read metadata oldest-first.
     // Isolated service/anomalous record numbers sort above normal flight
     // sequences and can time out; processing them last preserves metadata for

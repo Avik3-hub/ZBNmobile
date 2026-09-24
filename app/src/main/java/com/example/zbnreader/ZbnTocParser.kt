@@ -16,7 +16,8 @@ class ZbnTocParser {
     private data class RecordAccumulator(
         var descriptorCount: Long = 0,
         var firstAddress: Int = -1,
-        var lastAddress: Int = -1
+        var lastAddress: Int = -1,
+        var memoryBank: Int = -1
     )
 
     fun parse(tocBytes: ByteArray): List<FlightRecord> {
@@ -32,19 +33,26 @@ class ZbnTocParser {
             }
 
             if (!hasValidMarker(tocBytes, offset)) {
-                // A USB read can start at an arbitrary byte. Move one byte until
-                // the fixed marker is found, then continue in 16-byte steps.
-                offset++
+                // The catalog starts at a descriptor boundary. Sliding one byte
+                // here creates convincing false records from marker-like bytes
+                // inside payload/checksum fields (for example 0xFFFE records).
+                offset += DESCRIPTOR_SIZE
                 continue
             }
 
             val recordNumber = readUInt16Le(tocBytes, offset)
-            if (recordNumber != ERASED_RECORD_NUMBER) {
+            val memoryBank = tocBytes[offset + MEMORY_BANK_OFFSET].toInt() and 0xFF
+            if (recordNumber < RESERVED_RECORD_NUMBER_START &&
+                memoryBank in VALID_MEMORY_BANKS) {
                 val physicalAddress = readUInt24Le(tocBytes, offset + 2)
                 val accumulator = records.getOrPut(recordNumber) { RecordAccumulator() }
-                if (accumulator.firstAddress < 0) accumulator.firstAddress = physicalAddress
-                accumulator.lastAddress = physicalAddress
-                accumulator.descriptorCount++
+                // Do not merge descriptors from different banks into one flight.
+                if (accumulator.memoryBank < 0 || accumulator.memoryBank == memoryBank) {
+                    if (accumulator.firstAddress < 0) accumulator.firstAddress = physicalAddress
+                    accumulator.lastAddress = physicalAddress
+                    accumulator.memoryBank = memoryBank
+                    accumulator.descriptorCount++
+                }
             }
 
             offset += DESCRIPTOR_SIZE
@@ -61,8 +69,15 @@ class ZbnTocParser {
                 endTime = UNKNOWN_VALUE,
                 flightNum = UNKNOWN_VALUE,
                 tailNum = UNKNOWN_VALUE,
-                startAddress = alignToTransferPage(descriptor.lastAddress),
-                endAddress = alignToTransferPage(descriptor.firstAddress)
+                // Catalog direction differs between ZBN units. The PC program
+                // always requests the transfer page containing the lower end.
+                startAddress = alignToTransferPage(
+                    minOf(descriptor.firstAddress, descriptor.lastAddress)
+                ),
+                endAddress = alignToTransferPage(
+                    maxOf(descriptor.firstAddress, descriptor.lastAddress)
+                ),
+                memoryBank = descriptor.memoryBank
             )
         }
     }
@@ -108,7 +123,10 @@ class ZbnTocParser {
         private const val MARKER_OFFSET = 12
         private const val MARKER_FIRST = 0x55
         private const val MARKER_SECOND = 0xAA
-        private const val ERASED_RECORD_NUMBER = 0xFFFF
+        private const val MEMORY_BANK_OFFSET = 6
+        // 0xFFF0..0xFFFF are service/sentinel entries, not flight numbers.
+        private const val RESERVED_RECORD_NUMBER_START = 0xFFF0
+        private val VALID_MEMORY_BANKS = 1..2
         private const val TRANSFER_PAGE_MASK = 0xFFFFE0
         private const val UNKNOWN_VALUE = "—"
     }

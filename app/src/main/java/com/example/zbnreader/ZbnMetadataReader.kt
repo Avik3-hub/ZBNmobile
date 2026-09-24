@@ -7,25 +7,51 @@ import java.io.IOException
 /** Read-only metadata-page transaction observed in the supplied capture. */
 class ZbnMetadataReader(
     private val port: UsbSerialPort,
+    private val catalogBaudRate: Int = 115200,
+    private val metadataBaudRate: Int = 921600,
     private val diagnostic: (String) -> Unit = {}
 ) {
     fun read(record: FlightRecord): ZbnDecodedMetadata {
         val address = record.startAddress
         require(address in 0..0xFFFFE0 && address and 31 == 0)
-        // A fresh ENQ/ACK starts each page transaction. Never scan arbitrary
-        // residual bytes for ACK: a stale catalog is not an acknowledgement.
-        port.write(byteArrayOf(0x05), 1000)
-        // FTDI needs room for USB packets, even when only one payload byte
-        // is expected. Validate the returned length, not the buffer capacity.
-        val ack = ByteArray(4096)
-        val ackCount = port.read(ack, 2000)
-        if (ackCount != 1 || ack[0] != 0x06.toByte())
-            throw IOException("ЗБН не подтвердил запрос страницы (ACK: $ackCount байт)")
-        val command = byteArrayOf(0x13, 0x02, address.toByte(),
-            (address ushr 8).toByte(), (address ushr 16).toByte(), 0x02,
-            address.toByte(), (address ushr 8).toByte(),
-            (address ushr 16).toByte(), 0x02)
-        port.write(command, 1000)
+        require(record.memoryBank in 1..2) { "Неизвестный банк памяти ЗБН" }
+
+        // The reference PC program opens the session at 115200 for the catalog,
+        // but switches to 921600 before the ENQ of every metadata page.
+        setBaudRate(metadataBaudRate)
+        diagnostic(
+            "META_TX №${record.number}: baud=$metadataBaudRate, " +
+                "address=0x${address.toString(16)}, bank=${record.memoryBank}"
+        )
+        Thread.sleep(100)
+        try {
+            // A fresh ENQ/ACK starts each page transaction. Never scan arbitrary
+            // residual bytes for ACK: a stale catalog is not an acknowledgement.
+            port.write(byteArrayOf(0x05), 1000)
+            // FTDI needs room for USB packets, even when only one payload byte
+            // is expected. Validate the returned length, not the buffer capacity.
+            val ack = ByteArray(4096)
+            val ackCount = port.read(ack, 2000)
+            if (ackCount != 1 || ack[0] != 0x06.toByte())
+                throw IOException("ЗБН не подтвердил запрос страницы (ACK: $ackCount байт)")
+            val bank = record.memoryBank.toByte()
+            val command = byteArrayOf(0x13, 0x02, address.toByte(),
+                (address ushr 8).toByte(), (address ushr 16).toByte(), bank,
+                address.toByte(), (address ushr 8).toByte(),
+                (address ushr 16).toByte(), bank)
+            port.write(command, 1000)
+            return readPage(record, address)
+        } finally {
+            try {
+                setBaudRate(catalogBaudRate)
+                diagnostic("META_PORT: скорость возвращена на $catalogBaudRate бод")
+            } catch (e: Exception) {
+                diagnostic("META_PORT: не удалось вернуть $catalogBaudRate бод: ${e.message}")
+            }
+        }
+    }
+
+    private fun readPage(record: FlightRecord, address: Int): ZbnDecodedMetadata {
         val response = ByteArrayOutputStream()
         // Short responses are unverified: silence may also mean lost bytes.
         val chunk = ByteArray(4096)
@@ -62,6 +88,11 @@ class ZbnMetadataReader(
         // Observed end-of-transfer sequence. Short raw replies also need it:
         // otherwise the next ENQ can arrive while the ZBN is still in transfer.
         port.write(byteArrayOf(0x06, 0x05, 0x06), 1000)
+        val finalAck = ByteArray(4096)
+        val finalAckCount = port.read(finalAck, 1000)
+        if (finalAckCount != 1 || finalAck[0] != 0x06.toByte()) {
+            diagnostic("META_END №${record.number}: финальный ACK не получен ($finalAckCount байт)")
+        }
         // Log only AFTER receiving: formatting HEX during USB reads can lose data.
         diagnostic("META_RX №${record.number}: address=0x${address.toString(16)}, bytes=${raw.size}/$FIXED_PAGE_SIZE, chunks=$chunkSizes")
         for (offset in raw.indices step 512) {
@@ -76,6 +107,12 @@ class ZbnMetadataReader(
                 "формат и принадлежность ответа не подтверждены, подписи не используются")
             ZbnDecodedMetadata()
         }
+    }
+
+    private fun setBaudRate(baudRate: Int) {
+        port.setParameters(baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+        port.dtr = false
+        port.rts = false
     }
 
     private fun describePartialResponse(
