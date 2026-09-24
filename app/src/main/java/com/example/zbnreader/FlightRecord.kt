@@ -10,5 +10,7 @@ data class FlightRecord(
     val flightNum: String,
     val tailNum: String,
     val startAddress: Int = -1,
-    val endAddress: Int = -1
+    val endAddress: Int = -1,
+    /** Memory bank copied from byte 6 of the ZBN catalog descriptor. */
+    val memoryBank: Int = 0x02
 )
