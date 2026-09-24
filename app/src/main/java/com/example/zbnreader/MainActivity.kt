@@ -106,7 +106,8 @@ class MainActivity : AppCompatActivity() {
     private var selectedRow: TableRow? = null
     private val tocParser = ZbnTocParser()
     private var readingMetadata = false
-    private val flightCopyVerified = false
+    private val flightCopyVerified = true
+    private val fullDumpVerified = false
     private val downloadedRecordNumbers = mutableSetOf<Int>()
     private val errorRecordNumbers = mutableSetOf<Int>()
 
@@ -558,7 +559,7 @@ class MainActivity : AppCompatActivity() {
         selectedRow = row
         selectedRow?.setBackgroundColor(COLOR_SURFACE_CONTAINER)
         selectedRecord = record
-        setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+        setCustomButtonState(btnCopySelected, flightCopyVerified, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         tvStatus.text = "Выбрано включение №${record.number}"
         log("Выбрана строка: Включение №${record.number}, Борт: ${record.tailNum}, Рейс: ${record.flightNum}")
     }
@@ -853,26 +854,21 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val record = selectedRecord ?: return
+        require(record.startAddress >= 0 && record.endAddress >= record.startAddress)
+        require(record.sizeBytes > 0 && record.sizeBytes % 512L == 0L)
         mi171Pet.setBusy(true)
-        val currentIndex = flightList.indexOf(record)
-        val startOffset = record.sizeBytes
-        val bytesToRead: Long? = if (currentIndex >= 0 && currentIndex < flightList.size - 1) {
-            flightList[currentIndex + 1].sizeBytes - startOffset
-        } else {
-            null
-        }
+        val bytesToRead = record.sizeBytes
         setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         progressBar.visibility = View.VISIBLE
-        if (bytesToRead != null && bytesToRead > 0) {
-            progressBar.isIndeterminate = false
-            progressBar.max = 100
-            progressBar.progress = 0
-            tvStatus.text = "Статус: Скачивание №${record.number} (0%)..."
-        } else {
-            progressBar.isIndeterminate = true
-            tvStatus.text = "Статус: Скачивание №${record.number}..."
-        }
-        log("Начало копирования включения №${record.number}. Офсет: $startOffset, Размер: ${bytesToRead ?: "Неизвестен"}")
+        progressBar.isIndeterminate = false
+        progressBar.max = 100
+        progressBar.progress = 0
+        tvStatus.text = "Статус: Скачивание №${record.number} (0%)..."
+        log(
+            "Начало безопасного постраничного чтения №${record.number}: " +
+                "адреса=0x${record.startAddress.toString(16)}.." +
+                "0x${record.endAddress.toString(16)}, размер=$bytesToRead"
+        )
         lifecycleScope.launch(Dispatchers.IO) {
             val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             val driver = findUsbDriver(usbManager)
@@ -884,8 +880,7 @@ class MainActivity : AppCompatActivity() {
                 resetUi()
                 return@launch
             }
-            val connection = usbManager.openDevice(driver.device)
-            if (connection == null) {
+            var connection = usbManager.openDevice(driver.device) ?: run {
                 petSay("Нет доступа к USB. Разреши подключение", true)
                 log("Ошибка скачивания: Нет прав USB")
                 errorRecordNumbers.add(record.number)
@@ -900,24 +895,9 @@ class MainActivity : AppCompatActivity() {
                 val baud = prefs.getInt("baud_rate", 115200)
                 port.open(connection)
                 port.setParameters(baud, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
-                
                 port.dtr = false
                 port.rts = false
-
-                port.write(byteArrayOf(0x05), 1000)
-                val ack = ByteArray(1024)
-                val readAck = port.read(ack, 1000)
-                if (readAck <= 0 || ack[0] != 0x06.toByte()) {
-                    log("Ошибка скачивания: Накопитель не ответил на рукопожатие (ACK)")
-                    errorRecordNumbers.add(record.number)
-                    petSay("ЗБН не отвечает. Проверь питание и подключение", true)
-                    updateStatus("Статус: Сбой рукопожатия")
-                    runOnUiThread { updateTableUI(flightList) }
-                    resetUi()
-                    return@launch
-                }
                 petSay("Скачиваю полёт №${record.number}")
-                port.write(byteArrayOf(0x4D.toByte()), 1000)
                 val dateFormatted = try {
                     val inputFormat = SimpleDateFormat("dd.MM.yy", Locale.US)
                     val parsedDate = inputFormat.parse(record.date.trim())
@@ -928,66 +908,55 @@ class MainActivity : AppCompatActivity() {
                 val fileName = "${dateFormatted}_${record.number}_НАГИБИН"
                 val aircraftFolder = getAircraftFolder(record.tailNum)
                 outputFile = File(aircraftFolder, fileName)
-                val fos = FileOutputStream(outputFile)
-                val buffer = ByteArray(16384)
-                var skippedBytes = 0L
                 var writtenBytes = 0L
-                var noDataCounter = 0
-                var lastUiUpdateTime = 0L
-                while (true) {
-                    val count = port.read(buffer, 1000)
-                    if (count > 0) {
-                        noDataCounter = 0
-                        if (skippedBytes < startOffset) {
-                            val neededToSkip = startOffset - skippedBytes
-                            if (count <= neededToSkip) {
-                                skippedBytes += count
-                                continue
-                            } else {
-                                val validDataStart = neededToSkip.toInt()
-                                val validLength = count - validDataStart
-                                skippedBytes = startOffset
-                                val bytesToWrite = if (bytesToRead != null && (writtenBytes + validLength) > bytesToRead) {
-                                    (bytesToRead - writtenBytes).toInt()
-                                } else {
-                                    validLength
-                                }
-                                fos.write(buffer, validDataStart, bytesToWrite)
-                                writtenBytes += bytesToWrite
-                            }
-                        } else {
-                            val bytesToWrite = if (bytesToRead != null && (writtenBytes + count) > bytesToRead) {
-                                (bytesToRead - writtenBytes).toInt()
-                            } else {
-                                count
-                            }
-                            fos.write(buffer, 0, bytesToWrite)
-                            writtenBytes += bytesToWrite
+                val pageAddresses = generateSequence(record.startAddress) { previous ->
+                    (previous + 32).takeIf { it <= record.endAddress }
+                }.toList()
+                FileOutputStream(outputFile).use { fos ->
+                    for ((pageIndex, pageAddress) in pageAddresses.withIndex()) {
+                        if (pageIndex > 0) {
+                            try { port.close() } catch (_: Exception) {}
+                            connection.close()
+                            connection = usbManager.openDevice(driver.device)
+                                ?: throw IllegalStateException("Нет доступа к USB при чтении страницы")
+                            port.open(connection)
+                            port.setParameters(
+                                baud, 8,
+                                UsbSerialPort.STOPBITS_1,
+                                UsbSerialPort.PARITY_NONE
+                            )
+                            port.dtr = false
+                            port.rts = false
                         }
-
-                        val currentTime = System.currentTimeMillis()
-                        if (currentTime - lastUiUpdateTime > 300) {
-                            val currentWritten = writtenBytes
-                            runOnUiThread {
-                                if (bytesToRead != null && bytesToRead > 0) {
-                                    val percent = ((currentWritten * 100) / bytesToRead).toInt().coerceAtMost(100)
-                                    progressBar.progress = percent
-                                    tvStatus.text = "Статус: Скачивание №${record.number}... $percent%"
-                                } else {
-                                    tvStatus.text = "Статус: Скачивание №${record.number}... ($currentWritten Б)"
-                                }
-                            }
-                            lastUiUpdateTime = currentTime
+                        val reader = ZbnMetadataReader(
+                            port = port,
+                            catalogBaudRate = baud,
+                            metadataBaudRate = 921600
+                        ) { message -> log("COPY: $message") }
+                        val rawPage = reader.readRawPage(record, pageAddress)
+                        val payload = ZbnMetadataReader.extractRecordPayload(
+                            rawPage,
+                            record.number,
+                            pageAddress
+                        )
+                        if (writtenBytes + payload.size > bytesToRead) {
+                            throw IllegalStateException("Получено больше данных, чем указано в оглавлении")
                         }
-                        if (bytesToRead != null && writtenBytes >= bytesToRead) break
-                    } else {
-                        noDataCounter++
-                        if (noDataCounter >= 3) break
+                        fos.write(payload)
+                        writtenBytes += payload.size
+                        val percent = ((writtenBytes * 100) / bytesToRead).toInt().coerceAtMost(100)
+                        runOnUiThread {
+                            progressBar.progress = percent
+                            tvStatus.text = "Статус: Скачивание №${record.number}... $percent%"
+                        }
+                        log(
+                            "COPY_PAGE №${record.number}: ${pageIndex + 1}/${pageAddresses.size}, " +
+                                "адрес=0x${pageAddress.toString(16)}, данных=${payload.size}, " +
+                                "итого=$writtenBytes/$bytesToRead"
+                        )
                     }
                 }
-                fos.flush()
-                fos.close()
-                if (bytesToRead != null && writtenBytes < bytesToRead) {
+                if (writtenBytes != bytesToRead) {
                     petSay("Полёт №${record.number} получен не полностью. Проверь связь", true)
                     log("Ошибка: Передача прервана. Записано $writtenBytes из $bytesToRead байт.")
                     errorRecordNumbers.add(record.number)
@@ -1002,11 +971,7 @@ class MainActivity : AppCompatActivity() {
                     val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "573" }
                     val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "64" }
                     saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
-                    if (bytesToRead != null && bytesToRead > 0 && writtenBytes == bytesToRead) {
-                        petSay("Полёт №${record.number} скачан")
-                    } else {
-                        petSay("Данные сохранены, но полнота полёта №${record.number} не подтверждена", true)
-                    }
+                    petSay("Полёт №${record.number} скачан")
                     downloadedRecordNumbers.add(record.number)
                     errorRecordNumbers.remove(record.number)
                     log("Успешно сохранен рейс №${record.flightNum} ($writtenBytes байт)")
@@ -1022,13 +987,14 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { updateTableUI(flightList) }
             } finally {
                 try { port.close() } catch (e: Exception) { log("Ошибка закрытия порта", e) }
+                connection.close()
                 resetUi()
             }
         }
     }
 
     private fun executeFullDumpCommand() {
-        if (!flightCopyVerified) {
+        if (!fullDumpVerified) {
             log("Полный дамп заблокирован: старая команда читает только оглавление")
             return
         }
@@ -1237,7 +1203,13 @@ class MainActivity : AppCompatActivity() {
             mi171Pet.setBusy(false)
             setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
             setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
-            setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
+            setCustomButtonState(
+                btnCopySelected,
+                flightCopyVerified && selectedRecord != null,
+                COLOR_SURFACE_CONTAINER,
+                COLOR_TEXT,
+                16f
+            )
             setCustomButtonState(btnExportExcel, flightList.isNotEmpty(), COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
             progressBar.visibility = View.GONE
             progressBar.isIndeterminate = false
