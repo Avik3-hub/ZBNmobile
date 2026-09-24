@@ -756,19 +756,12 @@ class MainActivity : AppCompatActivity() {
     val rawCatalog = catalogBuffer.toByteArray()
     val descriptorSize = ZbnTocParser.DESCRIPTOR_SIZE
     val trailingByteCount = rawCatalog.size % descriptorSize
-    val lastDescriptorOffset = rawCatalog.size - 1 - descriptorSize
-    val lastDescriptorHasMarker =
-        lastDescriptorOffset >= 0 &&
-            rawCatalog[lastDescriptorOffset + 12] == 0x55.toByte() &&
-            rawCatalog[lastDescriptorOffset + 13] == 0xAA.toByte()
-    val lastDescriptorIsErased =
-        lastDescriptorOffset >= 0 &&
-            (lastDescriptorOffset until lastDescriptorOffset + descriptorSize)
-                .all { rawCatalog[it] == 0xFF.toByte() }
+    // A complete ZBN catalog is an aligned sequence of 16-byte slots followed
+    // by one 0x5F byte. The final slot can be a service entry without 55 AA,
+    // so validating its marker incorrectly rejects otherwise complete catalogs.
     val hasKnownTerminator =
         trailingByteCount == 1 &&
-            rawCatalog.last() == 0x5F.toByte() &&
-            (lastDescriptorHasMarker || lastDescriptorIsErased)
+            rawCatalog.last() == 0x5F.toByte()
     val catalogBytes = if (hasKnownTerminator) {
         log("После полного оглавления получен служебный завершающий байт 0x5F")
         rawCatalog.copyOf(rawCatalog.size - 1)
