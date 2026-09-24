@@ -21,6 +21,8 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
 import com.hoho.android.usbserial.driver.Ch34xSerialDriver
 import com.hoho.android.usbserial.driver.FtdiSerialDriver
@@ -295,7 +297,39 @@ class MainActivity : AppCompatActivity() {
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         }, ContextCompat.RECEIVER_EXPORTED)
         usbReceiverRegistered = true
-        setContentView(screen)
+        val scanPage = DocumentScanPage(this)
+        val pager = ViewPager2(this).apply {
+            adapter = StaticPagesAdapter(listOf(screen, scanPage))
+            offscreenPageLimit = 1
+        }
+        val firstDot = pageDot(true)
+        val secondDot = pageDot(false)
+        val pageIndicator = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, 5, 0, 7)
+            setBackgroundColor(COLOR_BG)
+            addView(firstDot)
+            addView(secondDot)
+        }
+        pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                firstDot.setTextColor(if (position == 0) COLOR_ACCENT else COLOR_BORDER)
+                secondDot.setTextColor(if (position == 1) COLOR_ACCENT else COLOR_BORDER)
+                if (position == 1) scanPage.refresh()
+            }
+        })
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(COLOR_BG)
+            addView(pager, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+            ))
+            addView(pageIndicator, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+        })
         renderTableHeader()
         log("Приложение запущено. Готовность к работе.")
     }
@@ -678,6 +712,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     flightList.clear()
                     flightList.addAll(records)
+                    rememberLastTailNumber(records)
                     updateTableUI(flightList)
                 }
                 if (catalogReadProblem) {
@@ -850,6 +885,50 @@ class MainActivity : AppCompatActivity() {
     }
     return selected
 }
+
+    private fun rememberLastTailNumber(records: List<FlightRecord>) {
+        val tail = records.asSequence()
+            .map { DocumentFileName.normalizeTailNumber(it.tailNum) }
+            .firstOrNull { it.isNotEmpty() }
+            ?: return
+        getSharedPreferences("AppSettings", MODE_PRIVATE)
+            .edit()
+            .putString(DocumentFileName.PREF_LAST_TAIL, tail)
+            .apply()
+    }
+
+    private fun pageDot(selected: Boolean) = TextView(this).apply {
+        text = "●"
+        textSize = 13f
+        gravity = Gravity.CENTER
+        setTextColor(if (selected) COLOR_ACCENT else COLOR_BORDER)
+        layoutParams = LinearLayout.LayoutParams(32, LinearLayout.LayoutParams.WRAP_CONTENT)
+        contentDescription = if (selected) "Страница ЗБН" else "Страница сканера"
+    }
+
+    private class StaticPagesAdapter(private val pages: List<View>) :
+        RecyclerView.Adapter<StaticPagesAdapter.PageHolder>() {
+        class PageHolder(val container: FrameLayout) : RecyclerView.ViewHolder(container)
+
+        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): PageHolder =
+            PageHolder(FrameLayout(parent.context).apply {
+                layoutParams = android.view.ViewGroup.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            })
+
+        override fun onBindViewHolder(holder: PageHolder, position: Int) {
+            (pages[position].parent as? android.view.ViewGroup)?.removeView(pages[position])
+            holder.container.removeAllViews()
+            holder.container.addView(pages[position], FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+        }
+
+        override fun getItemCount(): Int = pages.size
+    }
     private fun copySelectedFlight() {
         if (!flightCopyVerified) {
             petSay("Скачивание пока недоступно: протокол ещё проверяется", true)
