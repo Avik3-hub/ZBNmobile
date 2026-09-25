@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.hardware.usb.UsbManager
 import android.net.Uri
@@ -65,6 +66,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnExportExcel: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var tableLayout: TableLayout
+    private lateinit var tableScroll: HorizontalScrollView
     private lateinit var mi171Pet: Mi171PetView
     private lateinit var petSpeech: PetSpeechView
     private var observedUsbId: Int? = null
@@ -177,11 +179,12 @@ class MainActivity : AppCompatActivity() {
             addView(ImageView(this@MainActivity).apply {
                 setImageResource(R.drawable.zbn_blueprint_mi171)
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                alpha = 0.55f
+                setColorFilter(Color.parseColor("#4F8BC4"), PorterDuff.Mode.SRC_ATOP)
+                alpha = 0.90f
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, FrameLayout.LayoutParams(dp(158), dp(62), Gravity.END or Gravity.TOP).apply {
-                marginEnd = dp(42)
+            }, FrameLayout.LayoutParams(dp(190), dp(70), Gravity.END or Gravity.TOP).apply {
+                marginEnd = dp(34)
             })
             addView(appHeader, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -196,7 +199,7 @@ class MainActivity : AppCompatActivity() {
         val statusCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(6), dp(10), dp(6))
+            setPadding(dp(10), dp(4), dp(9), dp(4))
             background = createRoundedDrawable(COLOR_SURFACE, 16f, COLOR_BORDER, 1)
         }
         statusCard.addView(TextView(this).apply {
@@ -205,7 +208,7 @@ class MainActivity : AppCompatActivity() {
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(COLOR_ACCENT)
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(dp(34), dp(26)))
+        }, LinearLayout.LayoutParams(dp(30), dp(22)))
         tvStatus = TextView(this).apply {
             text = "Подключите ЗБН и нажмите «Начать сканирование»"
             textSize = 12f
@@ -225,7 +228,7 @@ class MainActivity : AppCompatActivity() {
             setTextColor(COLOR_AMBER)
             gravity = Gravity.CENTER
             background = createRoundedDrawable(Color.TRANSPARENT, 14f, COLOR_AMBER, 1)
-        }, LinearLayout.LayoutParams(dp(24), dp(24)))
+        }, LinearLayout.LayoutParams(dp(22), dp(22)))
         root.addView(statusCard, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
@@ -238,13 +241,13 @@ class MainActivity : AppCompatActivity() {
             typeface = resources.getFont(R.font.zbn_sans_bold)
             minHeight = 0
             minimumHeight = 0
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setPadding(dp(14), dp(8), dp(14), dp(8))
             setOnClickListener { startReading() }
         }
         setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
         val startParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
+            dp(44)
         ).apply { setMargins(0, 0, 0, dp(7)) }
         btnStart.layoutParams = startParams
         root.addView(btnStart)
@@ -268,7 +271,9 @@ class MainActivity : AppCompatActivity() {
             setTextColor(COLOR_AMBER)
             setPadding(dp(6), dp(3), dp(6), dp(7))
         })
-        val scrollTable = HorizontalScrollView(this).apply {
+        tableScroll = HorizontalScrollView(this).apply {
+            isSaveEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
@@ -280,8 +285,8 @@ class MainActivity : AppCompatActivity() {
             isStretchAllColumns = false
         }
         verticalScroll.addView(tableLayout)
-        scrollTable.addView(verticalScroll)
-        tableCard.addView(scrollTable)
+        tableScroll.addView(verticalScroll)
+        tableCard.addView(tableScroll)
         root.addView(tableCard)
 
         // 4. ПОЛОСА ПРОГРЕССА
@@ -299,7 +304,7 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(6))
         }
-        val btnParams = LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+        val btnParams = LinearLayout.LayoutParams(0, dp(40), 1f).apply {
             setMargins(dp(3), 0, dp(3), 0)
         }
         btnCopySelected = Button(this).apply {
@@ -336,7 +341,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(68)
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(58)
             )
             setPadding(dp(10), dp(6), dp(10), dp(6))
         }
@@ -364,10 +369,12 @@ class MainActivity : AppCompatActivity() {
         root.addView(logCard)
 
         val aircraftScene = FrameLayout(this).apply {
+            clipChildren = true
             addView(ImageView(this@MainActivity).apply {
                 setImageResource(R.drawable.zbn_helipad_night)
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                alpha = 0.62f
+                scaleType = ImageView.ScaleType.FIT_XY
+                alpha = 0.24f
+                translationY = dp(30).toFloat()
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, FrameLayout.LayoutParams(
@@ -379,11 +386,13 @@ class MainActivity : AppCompatActivity() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, FrameLayout.LayoutParams(dp(220), dp(88), Gravity.CENTER))
+            }, FrameLayout.LayoutParams(dp(218), dp(82), Gravity.END or Gravity.BOTTOM).apply {
+                marginEnd = dp(12)
+            })
         }
         root.addView(aircraftScene, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(92)
+            dp(78)
         ).apply {
             topMargin = dp(1)
         })
@@ -671,6 +680,9 @@ class MainActivity : AppCompatActivity() {
             headerRow.addView(tv)
         }
         tableLayout.addView(headerRow)
+        if (::tableScroll.isInitialized) {
+            tableScroll.post { tableScroll.scrollTo(0, 0) }
+        }
     }
 
     private fun updateTableUI(records: List<FlightRecord>) {

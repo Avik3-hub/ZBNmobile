@@ -3,6 +3,7 @@ package com.example.zbnreader
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
 import android.text.TextWatcher
@@ -34,7 +35,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
 
     init {
         orientation = VERTICAL
-        setPadding(dp(16), dp(10), dp(16), dp(8))
+        setPadding(dp(16), dp(7), dp(16), dp(6))
         setBackgroundColor(backgroundColor)
 
         val header = FrameLayout(context)
@@ -42,19 +43,19 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             orientation = VERTICAL
             addView(TextView(context).apply {
                 text = "ДОКУМЕНТЫ ЭКИПАЖА"
-                textSize = 9.5f
+                textSize = 9f
                 letterSpacing = 0.09f
                 setTextColor(amberColor)
-            }, fullWidth(bottom = 3))
+            }, fullWidth(bottom = 2))
             addView(TextView(context).apply {
                 text = "Паспорт БУР-1"
-                textSize = 24f
+                textSize = 22f
                 typeface = resources.getFont(R.font.zbn_sans_bold)
                 setTextColor(textColor)
-            }, fullWidth(bottom = 3))
+            }, fullWidth(bottom = 2))
             addView(TextView(context).apply {
                 text = "Съёмка, выравнивание и подготовка документа"
-                textSize = 11f
+                textSize = 10f
                 setTextColor(mutedColor)
             }, fullWidth())
         }
@@ -65,51 +66,53 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         header.addView(ImageView(context).apply {
             setImageResource(R.drawable.zbn_blueprint_mi171_front)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            alpha = 0.72f
+            setColorFilter(Color.parseColor("#4F8BC4"), PorterDuff.Mode.SRC_ATOP)
+            alpha = 0.92f
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, FrameLayout.LayoutParams(dp(126), dp(84), Gravity.END or Gravity.TOP).apply {
-            topMargin = dp(2)
+        }, FrameLayout.LayoutParams(dp(158), dp(88), Gravity.END or Gravity.TOP).apply {
+            topMargin = dp(-3)
+            marginEnd = dp(-2)
         })
-        addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(88)).apply {
-            bottomMargin = dp(6)
+        addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(80)).apply {
+            bottomMargin = dp(4)
         })
 
         val aircraftCard = LinearLayout(context).apply {
             orientation = VERTICAL
-            setPadding(dp(14), dp(9), dp(14), dp(9))
-            background = rounded(surfaceColor, 18f, borderColor)
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            background = rounded(surfaceColor, 16f, borderColor)
         }
         aircraftCard.addView(label("ПОСЛЕДНИЙ БОРТ", amberColor))
         tailValue.apply {
-            textSize = 19f
+            textSize = 17f
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentColor)
-            setPadding(0, dp(3), 0, 0)
+            setPadding(0, dp(2), 0, 0)
         }
         aircraftCard.addView(tailValue, fullWidth())
-        addView(aircraftCard, fullWidth(bottom = 8))
+        addView(aircraftCard, fullWidth(bottom = 5))
 
         val settingsCard = LinearLayout(context).apply {
             orientation = VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = rounded(surfaceColor, 20f, borderColor)
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+            background = rounded(surfaceColor, 17f, borderColor)
         }
 
-        settingsCard.addView(label("ФАМИЛИЯ ДЛЯ ИМЕНИ ФАЙЛА"), fullWidth(bottom = 6))
+        settingsCard.addView(label("ФАМИЛИЯ ДЛЯ ИМЕНИ ФАЙЛА"), fullWidth(bottom = 4))
         surnameInput.apply {
             setText(prefs.getString(DocumentFileName.PREF_SURNAME, "НАГИБИН"))
-            textSize = 16f
+            textSize = 14f
             setTextColor(textColor)
             setHintTextColor(mutedColor)
             hint = "ФАМИЛИЯ"
             setSingleLine(true)
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = rounded(fieldColor, 14f, borderColor)
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = rounded(fieldColor, 12f, borderColor)
         }
-        settingsCard.addView(surnameInput, fullWidth(bottom = 10))
+        settingsCard.addView(surnameInput, fullWidth(bottom = 7))
 
-        settingsCard.addView(label("РАЗРЕШЕНИЕ СНИМКА"), fullWidth(bottom = 6))
+        settingsCard.addView(label("РАЗРЕШЕНИЕ СНИМКА"), fullWidth(bottom = 4))
         val resolutionSpinner = Spinner(context).apply {
             adapter = ArrayAdapter(
                 context,
@@ -119,31 +122,31 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             val saved = prefs.getInt(DocumentFileName.PREF_MEGAPIXELS, 5)
             setSelection(megapixels.indexOf(saved).coerceAtLeast(0))
             setPadding(dp(10), 0, dp(10), 0)
-            background = rounded(fieldColor, 14f, borderColor)
+            background = rounded(fieldColor, 12f, borderColor)
         }
-        settingsCard.addView(resolutionSpinner, LayoutParams(LayoutParams.MATCH_PARENT, dp(46)).apply {
-            bottomMargin = dp(10)
+        settingsCard.addView(resolutionSpinner, LayoutParams(LayoutParams.MATCH_PARENT, dp(40)).apply {
+            bottomMargin = dp(7)
         })
 
-        settingsCard.addView(label("БУДЕТ СОХРАНЕНО КАК"), fullWidth(bottom = 6))
+        settingsCard.addView(label("БУДЕТ СОХРАНЕНО КАК"), fullWidth(bottom = 4))
         fileNamePreview.apply {
-            textSize = 14f
+            textSize = 12.5f
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentColor)
-            setPadding(dp(12), dp(9), dp(12), dp(9))
-            background = rounded(fieldColor, 14f, borderColor)
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+            background = rounded(fieldColor, 12f, borderColor)
         }
         settingsCard.addView(fileNamePreview, fullWidth())
-        addView(settingsCard, fullWidth(bottom = 10))
+        addView(settingsCard, fullWidth(bottom = 7))
 
         val scanButton = Button(context).apply {
             text = "СФОТОГРАФИРОВАТЬ ДОКУМЕНТ"
-            textSize = 14f
+            textSize = 13f
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentTextColor)
             minHeight = 0
             minimumHeight = 0
-            background = rounded(accentColor, 20f)
+            background = rounded(accentColor, 17f)
             setOnClickListener {
                 val surname = DocumentFileName.normalizeSurname(surnameInput.text.toString())
                 val mp = megapixels[resolutionSpinner.selectedItemPosition]
@@ -158,7 +161,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
                 })
             }
         }
-        addView(scanButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(54)))
+        addView(scanButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)))
 
         addView(ImageView(context).apply {
             setImageResource(R.drawable.zbn_helipad_night)
@@ -166,7 +169,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {
-            topMargin = dp(6)
+            topMargin = dp(3)
         })
 
         surnameInput.addTextChangedListener(object : TextWatcher {
@@ -193,7 +196,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
 
     private fun label(text: String, color: Int = mutedColor) = TextView(context).apply {
         this.text = text
-        textSize = 10f
+        textSize = 9f
         letterSpacing = 0.07f
         setTextColor(color)
     }
