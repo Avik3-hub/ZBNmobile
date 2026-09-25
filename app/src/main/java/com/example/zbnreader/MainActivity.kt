@@ -162,16 +162,11 @@ class MainActivity : AppCompatActivity() {
             setTextColor(COLOR_TEXT_MUTED)
         }
         titleBlock.addView(headerTailValue)
-        val btnSettings = Button(this).apply {
-            text = "⋮"
-            textSize = 26f
-            setTextColor(COLOR_AMBER)
+        val btnSettings = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_more_vertical)
             background = createRoundedDrawable(Color.TRANSPARENT, 0f)
-            minHeight = 0
-            minimumHeight = 0
-            minWidth = 0
-            minimumWidth = 0
-            gravity = Gravity.CENTER
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(dp(9), dp(6), dp(9), dp(6))
             contentDescription = "Настройки"
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
@@ -383,21 +378,11 @@ class MainActivity : AppCompatActivity() {
         logCard.addView(scrollViewLog)
 
         val lowerPanel = FrameLayout(this).apply {
-            clipChildren = true
+            clipChildren = false
             addView(logCard, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
-            ))
-            addView(ImageView(this@MainActivity).apply {
-                setImageResource(R.drawable.zbn_helipad_night)
-                scaleType = ImageView.ScaleType.FIT_XY
-                alpha = 0.13f
-                translationY = dp(48).toFloat()
-                contentDescription = null
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+                dp(100),
+                Gravity.TOP
             ))
             addView(ImageView(this@MainActivity).apply {
                 setImageResource(R.drawable.zbn_mi171_scene)
@@ -405,7 +390,7 @@ class MainActivity : AppCompatActivity() {
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, FrameLayout.LayoutParams(dp(250), dp(104), Gravity.END or Gravity.BOTTOM).apply {
-                marginEnd = dp(-2)
+                marginEnd = dp(24)
                 bottomMargin = dp(-7)
             })
         }
