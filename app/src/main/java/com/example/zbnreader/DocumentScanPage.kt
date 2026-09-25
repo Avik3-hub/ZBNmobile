@@ -2,7 +2,9 @@ package com.example.zbnreader
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
@@ -25,6 +27,16 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
     private val amberColor = Color.parseColor("#F1B45B")
     private val textColor = Color.parseColor("#F2F5F7")
     private val mutedColor = Color.parseColor("#89929C")
+    private val blueprintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#21364C")
+        style = Paint.Style.STROKE
+        strokeWidth = dp(1f).toFloat()
+    }
+    private val runwayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#543A18")
+        style = Paint.Style.STROKE
+        strokeWidth = dp(1f).toFloat()
+    }
 
     private val prefs = context.getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
     private val tailValue = TextView(context)
@@ -34,6 +46,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
 
     init {
         orientation = VERTICAL
+        setWillNotDraw(false)
         setPadding(dp(16), dp(14), dp(16), dp(12))
         setBackgroundColor(backgroundColor)
 
@@ -148,6 +161,29 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             override fun afterTextChanged(s: Editable?) = Unit
         })
         refresh()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val helicopterX = width - dp(78).toFloat()
+        val helicopterY = dp(54).toFloat()
+        canvas.drawLine(helicopterX - dp(58), helicopterY, helicopterX + dp(58), helicopterY, blueprintPaint)
+        canvas.drawLine(helicopterX, helicopterY - dp(8), helicopterX, helicopterY + dp(24), blueprintPaint)
+        canvas.drawOval(
+            helicopterX - dp(20), helicopterY + dp(15),
+            helicopterX + dp(20), helicopterY + dp(43), blueprintPaint
+        )
+        canvas.drawLine(
+            helicopterX + dp(18), helicopterY + dp(23),
+            helicopterX + dp(53), helicopterY + dp(16), blueprintPaint
+        )
+
+        val padY = height - dp(56).toFloat()
+        canvas.drawOval(
+            width / 2f - dp(116), padY - dp(20),
+            width / 2f + dp(116), padY + dp(20), runwayPaint
+        )
+        canvas.drawLine(dp(20).toFloat(), padY + dp(30), width - dp(20).toFloat(), padY + dp(30), blueprintPaint)
     }
 
     fun refresh() {

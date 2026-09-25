@@ -129,7 +129,7 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(10), dp(12), dp(8))
-            setBackgroundColor(COLOR_BG)
+            setBackgroundColor(Color.TRANSPARENT)
         }
 
         // 1. ШАПКА И СТАТУС
@@ -206,7 +206,7 @@ class MainActivity : AppCompatActivity() {
         // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ
         val tableCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = createRoundedDrawable(COLOR_SURFACE, 20f)
+            background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
             ).apply { setMargins(0, 0, 0, dp(10)) }
@@ -285,16 +285,24 @@ class MainActivity : AppCompatActivity() {
         // 6. ОКНО КОНСОЛИ
         val logCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = createRoundedDrawable(COLOR_SURFACE, 20f)
+            background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(82)
             )
             setPadding(dp(10), dp(8), dp(10), dp(8))
         }
+        logCard.addView(TextView(this).apply {
+            text = "ЖУРНАЛ СЕАНСА"
+            textSize = 10f
+            letterSpacing = 0.08f
+            setTextColor(COLOR_AMBER)
+            setPadding(dp(2), 0, dp(2), dp(4))
+        })
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT
+                0,
+                1f
             )
         }
         tvLog = TextView(this).apply {
@@ -307,6 +315,11 @@ class MainActivity : AppCompatActivity() {
         root.addView(logCard)
 
         val screen = FrameLayout(this).apply {
+            setBackgroundColor(COLOR_BG)
+            addView(AviationBackdropView(this@MainActivity), FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
             addView(root, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -343,7 +356,7 @@ class MainActivity : AppCompatActivity() {
         val pageIndicator = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(5), dp(5), dp(5), dp(5))
+            setPadding(dp(3), dp(3), dp(3), dp(3))
             background = createRoundedDrawable(COLOR_SURFACE, 22f, COLOR_BORDER, 1)
             elevation = dp(8).toFloat()
             addView(firstTab)
@@ -368,7 +381,7 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                setMargins(dp(12), dp(4), dp(12), dp(10))
+                setMargins(dp(16), dp(3), dp(16), dp(7))
             })
         })
         renderTableHeader()
@@ -940,11 +953,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun pageTab(label: String, selected: Boolean) = TextView(this).apply {
         text = label
-        textSize = 13f
+        textSize = 11.5f
         setTypeface(null, Typeface.BOLD)
         gravity = Gravity.CENTER
-        minHeight = dp(46)
-        layoutParams = LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+        minHeight = dp(34)
+        layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f).apply {
             setMargins(dp(2), 0, dp(2), 0)
         }
         stylePageTab(this, selected)
@@ -953,9 +966,9 @@ class MainActivity : AppCompatActivity() {
     private fun stylePageTab(tab: TextView, selected: Boolean) {
         tab.setTextColor(if (selected) COLOR_ACCENT_TEXT else COLOR_TEXT_MUTED)
         tab.background = if (selected) {
-            createRoundedDrawable(COLOR_ACCENT, 18f)
+            createRoundedDrawable(COLOR_ACCENT, 14f)
         } else {
-            createRoundedDrawable(Color.TRANSPARENT, 18f)
+            createRoundedDrawable(Color.TRANSPARENT, 14f)
         }
     }
 
