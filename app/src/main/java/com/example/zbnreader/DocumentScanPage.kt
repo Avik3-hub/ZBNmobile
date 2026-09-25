@@ -40,7 +40,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         setPadding(dp(16), dp(7), dp(16), dp(6))
         setBackgroundColor(backgroundColor)
 
-        val header = FrameLayout(context)
+        val header = FrameLayout(context).apply { clipChildren = false }
         val headerText = LinearLayout(context).apply {
             orientation = VERTICAL
             addView(TextView(context).apply {
@@ -74,7 +74,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             alpha = 0.92f
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, FrameLayout.LayoutParams(dp(198), dp(116), Gravity.END or Gravity.TOP).apply {
+        }, FrameLayout.LayoutParams(dp(238), dp(140), Gravity.END or Gravity.TOP).apply {
             topMargin = dp(-4)
             marginEnd = dp(-8)
         })

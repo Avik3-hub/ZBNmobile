@@ -164,8 +164,8 @@ class MainActivity : AppCompatActivity() {
         titleBlock.addView(headerTailValue)
         val btnSettings = Button(this).apply {
             text = "⋮"
-            textSize = 24f
-            setTextColor(COLOR_TEXT)
+            textSize = 26f
+            setTextColor(COLOR_AMBER)
             background = createRoundedDrawable(Color.TRANSPARENT, 0f)
             minHeight = 0
             minimumHeight = 0
@@ -192,8 +192,8 @@ class MainActivity : AppCompatActivity() {
                 dp(210), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.START or Gravity.TOP
             ))
             addView(btnSettings, FrameLayout.LayoutParams(
-                dp(38), dp(42), Gravity.END or Gravity.TOP
-            ).apply { topMargin = dp(-5) })
+                dp(38), dp(38), Gravity.END or Gravity.TOP
+            ))
         }
         root.addView(headerFrame, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -260,7 +260,7 @@ class MainActivity : AppCompatActivity() {
         val tableCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = createRoundedDrawable(COLOR_SURFACE, 10f, COLOR_BORDER, 1)
-            minimumHeight = dp(290)
+            minimumHeight = dp(230)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
             ).apply {
@@ -279,6 +279,7 @@ class MainActivity : AppCompatActivity() {
         tableScroll = HorizontalScrollView(this).apply {
             isSaveEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
+            isHorizontalScrollBarEnabled = false
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
@@ -307,16 +308,18 @@ class MainActivity : AppCompatActivity() {
         val actionPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(6))
+            setPadding(0, 0, 0, dp(4))
         }
-        val btnParams = LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+        val btnParams = LinearLayout.LayoutParams(0, dp(34), 1f).apply {
             setMargins(dp(3), 0, dp(3), 0)
         }
         btnCopySelected = Button(this).apply {
             text = "Копировать"
             textSize = 10.5f
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_copy, 0, 0, 0)
-            compoundDrawablePadding = dp(5)
+            compoundDrawablePadding = dp(2)
+            gravity = Gravity.CENTER
+            setPadding(dp(4), 0, dp(4), 0)
             setOnClickListener { copySelectedFlight() }
         }
         btnCopySelected.layoutParams = btnParams
@@ -326,7 +329,9 @@ class MainActivity : AppCompatActivity() {
             text = "ВЕСЬ ЗБН"
             textSize = 10.5f
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_storage, 0, 0, 0)
-            compoundDrawablePadding = dp(5)
+            compoundDrawablePadding = dp(2)
+            gravity = Gravity.CENTER
+            setPadding(dp(4), 0, dp(4), 0)
             setOnClickListener { executeFullDumpCommand() }
         }
         btnFullDump.layoutParams = btnParams
@@ -336,7 +341,9 @@ class MainActivity : AppCompatActivity() {
             text = "В Excel"
             textSize = 10.5f
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_table, 0, 0, 0)
-            compoundDrawablePadding = dp(5)
+            compoundDrawablePadding = dp(2)
+            gravity = Gravity.CENTER
+            setPadding(dp(4), 0, dp(4), 0)
             setOnClickListener { exportToExcel() }
         }
         btnExportExcel.layoutParams = btnParams
@@ -404,7 +411,7 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(lowerPanel, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(126)
+            dp(184)
         ).apply {
             topMargin = dp(1)
         })

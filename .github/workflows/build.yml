@@ -50,11 +50,11 @@ jobs:
         shell: bash
         run: |
           cp app/build/outputs/apk/release/app-release.apk \
-            "app/build/outputs/apk/release/ZBNmobile-1.3.6-build-${{ github.run_number }}.apk"
+            "app/build/outputs/apk/release/ZBNmobile-1.3.7-build-${{ github.run_number }}.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZBNmobile-1.3.6-build-${{ github.run_number }}
-          path: app/build/outputs/apk/release/ZBNmobile-1.3.6-build-${{ github.run_number }}.apk
+          name: ZBNmobile-1.3.7-build-${{ github.run_number }}
+          path: app/build/outputs/apk/release/ZBNmobile-1.3.7-build-${{ github.run_number }}.apk
           retention-days: 7

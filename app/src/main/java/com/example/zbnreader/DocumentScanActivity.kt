@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.drawable.GradientDrawable
 import android.media.MediaScannerConnection
 import android.os.Bundle
 import android.os.Environment
@@ -38,6 +39,15 @@ import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
 class DocumentScanActivity : AppCompatActivity() {
+    private val uiBackground = Color.parseColor("#080A0D")
+    private val uiSurface = Color.parseColor("#14181D")
+    private val uiSurfaceRaised = Color.parseColor("#20262D")
+    private val uiBorder = Color.parseColor("#343C45")
+    private val uiAccent = Color.parseColor("#A8C7FA")
+    private val uiAccentText = Color.parseColor("#071526")
+    private val uiAmber = Color.parseColor("#F1B45B")
+    private val uiText = Color.parseColor("#F2F5F7")
+    private val uiMuted = Color.parseColor("#89929C")
     private lateinit var previewView: PreviewView
     private lateinit var captureButton: Button
     private lateinit var editorPanel: LinearLayout
@@ -77,7 +87,7 @@ class DocumentScanActivity : AppCompatActivity() {
     }
 
     private fun buildUi() {
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        val root = FrameLayout(this).apply { setBackgroundColor(uiBackground) }
         previewView = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
         root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
 
@@ -85,23 +95,28 @@ class DocumentScanActivity : AppCompatActivity() {
 
         status = TextView(this).apply {
             text = "Расположите документ внутри рамки"
-            textSize = 14f
+            textSize = 13f
+            typeface = resources.getFont(R.font.zbn_sans_bold)
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setBackgroundColor(0x99000000.toInt())
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setTextColor(uiText)
+            background = rounded(uiSurface, 8f, uiBorder)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
         }
         root.addView(status, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply {
-            setMargins(dp(16), dp(20), dp(16), 0)
+            setMargins(dp(16), dp(14), dp(16), 0)
         })
 
         captureButton = Button(this).apply {
             text = "СФОТОГРАФИРОВАТЬ"
+            stylePrimaryButton(this)
             setOnClickListener { takePhoto() }
         }
-        root.addView(captureButton, FrameLayout.LayoutParams(-1, dp(64), Gravity.BOTTOM).apply {
-            setMargins(dp(24), 0, dp(24), dp(28))
-        })
+        val captureControls = FrameLayout(this).apply {
+            addView(captureButton, FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM).apply {
+                setMargins(dp(22), 0, dp(22), dp(16))
+            })
+        }
+        root.addView(controlsBackdrop(captureControls), FrameLayout.LayoutParams(-1, dp(116), Gravity.BOTTOM))
 
         progress = ProgressBar(this).apply { visibility = View.GONE }
         root.addView(progress, FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER))
@@ -110,68 +125,82 @@ class DocumentScanActivity : AppCompatActivity() {
         editorPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(uiBackground)
             addView(TextView(context).apply {
                 text = "Передвиньте 4 точки точно на углы документа"
-                textSize = 14f
+                textSize = 13f
+                typeface = resources.getFont(R.font.zbn_sans_bold)
                 gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
-                setPadding(dp(12), dp(12), dp(12), dp(12))
+                setTextColor(uiText)
+                setPadding(dp(12), dp(14), dp(12), dp(10))
             }, LinearLayout.LayoutParams(-1, -2))
             addView(cropView, LinearLayout.LayoutParams(-1, 0, 1f))
-            addView(LinearLayout(this@DocumentScanActivity).apply {
+            val actions = LinearLayout(this@DocumentScanActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
-                setPadding(dp(12), dp(8), dp(12), dp(20))
+                gravity = Gravity.CENTER
+                setPadding(dp(12), dp(10), dp(12), dp(14))
                 addView(Button(context).apply {
                     text = "ПЕРЕСНЯТЬ"
+                    styleSecondaryButton(this)
                     setOnClickListener { showCamera() }
-                }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginEnd = dp(6) })
+                }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(5) })
                 addView(Button(context).apply {
                     text = "ОБРЕЗАТЬ"
+                    stylePrimaryButton(this)
                     setOnClickListener { cropDocument() }
-                }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginStart = dp(6) })
-            }, LinearLayout.LayoutParams(-1, -2))
+                }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(5) })
+            }
+            addView(controlsBackdrop(actions), LinearLayout.LayoutParams(-1, dp(88)))
         }
         root.addView(editorPanel, FrameLayout.LayoutParams(-1, -1))
 
         reviewImage = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(uiBackground)
         }
         reviewPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(uiBackground)
             addView(reviewImage, LinearLayout.LayoutParams(-1, 0, 1f))
-            filterStatus = TextView(context).apply {
-                text = "Фильтр: ЦВЕТ"
-                gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
-                setPadding(0, dp(6), 0, dp(2))
+            val controls = LinearLayout(this@DocumentScanActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                filterStatus = TextView(context).apply {
+                    text = "ФИЛЬТР: ЦВЕТ"
+                    textSize = 11f
+                    letterSpacing = 0.08f
+                    typeface = resources.getFont(R.font.zbn_sans_bold)
+                    gravity = Gravity.CENTER
+                    setTextColor(uiAmber)
+                    setPadding(0, dp(7), 0, dp(4))
+                }
+                addView(filterStatus, LinearLayout.LayoutParams(-1, dp(30)))
+                addView(LinearLayout(this@DocumentScanActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(dp(8), dp(2), dp(8), dp(4))
+                    addFilterButton("ОРИГИНАЛ", DocumentProcessor.Filter.ORIGINAL)
+                    addFilterButton("ЦВЕТ", DocumentProcessor.Filter.COLOR)
+                    addFilterButton("Ч/Б", DocumentProcessor.Filter.BLACK_WHITE)
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+                addView(LinearLayout(this@DocumentScanActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(dp(12), dp(5), dp(12), dp(12))
+                    addView(Button(context).apply {
+                        text = "ИЗМЕНИТЬ УГЛЫ"
+                        styleSecondaryButton(this)
+                        setOnClickListener {
+                            reviewPanel.visibility = View.GONE
+                            editorPanel.visibility = View.VISIBLE
+                        }
+                    }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(5) })
+                    addView(Button(context).apply {
+                        text = "СОХРАНИТЬ JPG"
+                        stylePrimaryButton(this)
+                        setOnClickListener { savePhoto() }
+                    }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(5) })
+                }, LinearLayout.LayoutParams(-1, dp(65)))
             }
-            addView(filterStatus, LinearLayout.LayoutParams(-1, -2))
-            addView(LinearLayout(this@DocumentScanActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(dp(8), dp(4), dp(8), dp(4))
-                addFilterButton("ОРИГИНАЛ", DocumentProcessor.Filter.ORIGINAL)
-                addFilterButton("ЦВЕТ", DocumentProcessor.Filter.COLOR)
-                addFilterButton("Ч/Б", DocumentProcessor.Filter.BLACK_WHITE)
-            }, LinearLayout.LayoutParams(-1, dp(54)))
-            addView(LinearLayout(this@DocumentScanActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(dp(12), dp(8), dp(12), dp(20))
-                addView(Button(context).apply {
-                    text = "ИЗМЕНИТЬ УГЛЫ"
-                    setOnClickListener {
-                        reviewPanel.visibility = View.GONE
-                        editorPanel.visibility = View.VISIBLE
-                    }
-                }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginEnd = dp(6) })
-                addView(Button(context).apply {
-                    text = "СОХРАНИТЬ JPEG"
-                    setOnClickListener { savePhoto() }
-                }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginStart = dp(6) })
-            }, LinearLayout.LayoutParams(-1, -2))
+            addView(controlsBackdrop(controls), LinearLayout.LayoutParams(-1, dp(139)))
         }
         root.addView(reviewPanel, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
@@ -286,12 +315,55 @@ class DocumentScanActivity : AppCompatActivity() {
     private fun LinearLayout.addFilterButton(label: String, filter: DocumentProcessor.Filter) {
         addView(Button(context).apply {
             text = label
-            textSize = 11f
+            textSize = 10.5f
+            styleSecondaryButton(this)
             setOnClickListener { applyFilter(filter) }
         }, LinearLayout.LayoutParams(0, -1, 1f).apply {
             marginStart = dp(3)
             marginEnd = dp(3)
         })
+    }
+
+    private fun controlsBackdrop(content: View): FrameLayout = FrameLayout(this).apply {
+        setBackgroundColor(uiBackground)
+        addView(ImageView(this@DocumentScanActivity).apply {
+            setImageResource(R.drawable.zbn_helipad_night)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            alpha = 0.34f
+            contentDescription = null
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, FrameLayout.LayoutParams(-1, -1))
+        addView(View(this@DocumentScanActivity).apply {
+            setBackgroundColor(Color.argb(92, 8, 10, 13))
+        }, FrameLayout.LayoutParams(-1, -1))
+        addView(content, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun stylePrimaryButton(button: Button) = button.apply {
+        textSize = 12f
+        typeface = resources.getFont(R.font.zbn_sans_bold)
+        setTextColor(uiAccentText)
+        background = rounded(uiAccent, 7f)
+        minHeight = 0
+        minimumHeight = 0
+        setPadding(dp(8), 0, dp(8), 0)
+    }
+
+    private fun styleSecondaryButton(button: Button) = button.apply {
+        textSize = 11f
+        typeface = resources.getFont(R.font.zbn_sans_bold)
+        setTextColor(uiText)
+        background = rounded(uiSurfaceRaised, 7f, uiBorder)
+        minHeight = 0
+        minimumHeight = 0
+        setPadding(dp(6), 0, dp(6), 0)
+    }
+
+    private fun rounded(color: Int, radiusDp: Float, stroke: Int? = null) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(color)
+        cornerRadius = dp(radiusDp).toFloat()
+        if (stroke != null) setStroke(dp(1), stroke)
     }
 
     private fun applyFilter(filter: DocumentProcessor.Filter) {
