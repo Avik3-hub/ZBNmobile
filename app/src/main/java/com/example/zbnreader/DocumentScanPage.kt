@@ -2,9 +2,7 @@ package com.example.zbnreader
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
@@ -13,6 +11,8 @@ import android.view.Gravity
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
@@ -27,17 +27,6 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
     private val amberColor = Color.parseColor("#F1B45B")
     private val textColor = Color.parseColor("#F2F5F7")
     private val mutedColor = Color.parseColor("#89929C")
-    private val blueprintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#21364C")
-        style = Paint.Style.STROKE
-        strokeWidth = dp(1f).toFloat()
-    }
-    private val runwayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#543A18")
-        style = Paint.Style.STROKE
-        strokeWidth = dp(1f).toFloat()
-    }
-
     private val prefs = context.getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
     private val tailValue = TextView(context)
     private val surnameInput = EditText(context)
@@ -46,29 +35,46 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
 
     init {
         orientation = VERTICAL
-        setWillNotDraw(false)
         setPadding(dp(16), dp(14), dp(16), dp(12))
         setBackgroundColor(backgroundColor)
 
-        addView(TextView(context).apply {
-            text = "ДОКУМЕНТЫ ЭКИПАЖА"
-            textSize = 10f
-            letterSpacing = 0.09f
-            setTextColor(amberColor)
-        }, fullWidth(bottom = 3))
-
-        addView(TextView(context).apply {
-            text = "Паспорт БУР-1"
-            textSize = 26f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(textColor)
-        }, fullWidth(bottom = 3))
-
-        addView(TextView(context).apply {
-            text = "Съёмка, выравнивание и подготовка документа"
-            textSize = 12f
-            setTextColor(mutedColor)
-        }, fullWidth(bottom = 14))
+        val header = FrameLayout(context)
+        val headerText = LinearLayout(context).apply {
+            orientation = VERTICAL
+            addView(TextView(context).apply {
+                text = "ДОКУМЕНТЫ ЭКИПАЖА"
+                textSize = 10f
+                letterSpacing = 0.09f
+                setTextColor(amberColor)
+            }, fullWidth(bottom = 3))
+            addView(TextView(context).apply {
+                text = "Паспорт БУР-1"
+                textSize = 26f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(textColor)
+            }, fullWidth(bottom = 3))
+            addView(TextView(context).apply {
+                text = "Съёмка, выравнивание и подготовка документа"
+                textSize = 12f
+                setTextColor(mutedColor)
+            }, fullWidth())
+        }
+        header.addView(headerText, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        ))
+        header.addView(ImageView(context).apply {
+            setImageResource(R.drawable.zbn_blueprint_mi171)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            alpha = 0.42f
+            contentDescription = null
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, FrameLayout.LayoutParams(dp(152), dp(78), Gravity.END or Gravity.TOP).apply {
+            topMargin = dp(1)
+        })
+        addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(102)).apply {
+            bottomMargin = dp(10)
+        })
 
         val aircraftCard = LinearLayout(context).apply {
             orientation = VERTICAL
@@ -155,35 +161,21 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         }
         addView(scanButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(62)))
 
+        addView(ImageView(context).apply {
+            setImageResource(R.drawable.zbn_helipad_night)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = null
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {
+            topMargin = dp(6)
+        })
+
         surnameInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = updatePreview()
             override fun afterTextChanged(s: Editable?) = Unit
         })
         refresh()
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        val helicopterX = width - dp(78).toFloat()
-        val helicopterY = dp(54).toFloat()
-        canvas.drawLine(helicopterX - dp(58), helicopterY, helicopterX + dp(58), helicopterY, blueprintPaint)
-        canvas.drawLine(helicopterX, helicopterY - dp(8), helicopterX, helicopterY + dp(24), blueprintPaint)
-        canvas.drawOval(
-            helicopterX - dp(20), helicopterY + dp(15),
-            helicopterX + dp(20), helicopterY + dp(43), blueprintPaint
-        )
-        canvas.drawLine(
-            helicopterX + dp(18), helicopterY + dp(23),
-            helicopterX + dp(53), helicopterY + dp(16), blueprintPaint
-        )
-
-        val padY = height - dp(56).toFloat()
-        canvas.drawOval(
-            width / 2f - dp(116), padY - dp(20),
-            width / 2f + dp(116), padY + dp(20), runwayPaint
-        )
-        canvas.drawLine(dp(20).toFloat(), padY + dp(30), width - dp(20).toFloat(), padY + dp(30), blueprintPaint)
     }
 
     fun refresh() {
