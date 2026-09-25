@@ -379,6 +379,16 @@ class MainActivity : AppCompatActivity() {
 
         val lowerPanel = FrameLayout(this).apply {
             clipChildren = false
+            addView(ImageView(this@MainActivity).apply {
+                setImageResource(R.drawable.zbn_perspective_grid)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                alpha = 0.82f
+                contentDescription = null
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
             addView(logCard, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 dp(100),
@@ -389,7 +399,7 @@ class MainActivity : AppCompatActivity() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, FrameLayout.LayoutParams(dp(250), dp(104), Gravity.END or Gravity.BOTTOM).apply {
+            }, FrameLayout.LayoutParams(dp(320), dp(136), Gravity.END or Gravity.BOTTOM).apply {
                 marginEnd = dp(24)
                 bottomMargin = dp(-7)
             })

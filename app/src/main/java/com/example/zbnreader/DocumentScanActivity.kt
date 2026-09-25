@@ -52,7 +52,7 @@ class DocumentScanActivity : AppCompatActivity() {
     private lateinit var captureButton: Button
     private lateinit var editorPanel: LinearLayout
     private lateinit var cropView: DocumentCropView
-    private lateinit var reviewPanel: LinearLayout
+    private lateinit var reviewPanel: FrameLayout
     private lateinit var reviewImage: ImageView
     private lateinit var filterStatus: TextView
     private lateinit var status: TextView
@@ -113,10 +113,10 @@ class DocumentScanActivity : AppCompatActivity() {
         }
         val captureControls = FrameLayout(this).apply {
             addView(captureButton, FrameLayout.LayoutParams(-1, dp(48), Gravity.BOTTOM).apply {
-                setMargins(dp(22), 0, dp(22), dp(16))
+                setMargins(dp(22), 0, dp(22), dp(66))
             })
         }
-        root.addView(controlsBackdrop(captureControls), FrameLayout.LayoutParams(-1, dp(116), Gravity.BOTTOM))
+        root.addView(controlsBackdrop(captureControls), FrameLayout.LayoutParams(-1, dp(196), Gravity.BOTTOM))
 
         progress = ProgressBar(this).apply { visibility = View.GONE }
         root.addView(progress, FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER))
@@ -137,7 +137,7 @@ class DocumentScanActivity : AppCompatActivity() {
             addView(cropView, LinearLayout.LayoutParams(-1, 0, 1f))
             val actions = LinearLayout(this@DocumentScanActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
+                gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
                 setPadding(dp(12), dp(10), dp(12), dp(14))
                 addView(Button(context).apply {
                     text = "ПЕРЕСНЯТЬ"
@@ -150,19 +150,30 @@ class DocumentScanActivity : AppCompatActivity() {
                     setOnClickListener { cropDocument() }
                 }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(5) })
             }
-            addView(controlsBackdrop(actions), LinearLayout.LayoutParams(-1, dp(88)))
+            addView(controlsBackdrop(actions), LinearLayout.LayoutParams(-1, dp(146)))
         }
         root.addView(editorPanel, FrameLayout.LayoutParams(-1, -1))
 
         reviewImage = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setBackgroundColor(uiBackground)
+            setBackgroundColor(Color.TRANSPARENT)
         }
-        reviewPanel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        reviewPanel = FrameLayout(this).apply {
             visibility = View.GONE
             setBackgroundColor(uiBackground)
-            addView(reviewImage, LinearLayout.LayoutParams(-1, 0, 1f))
+            addView(ImageView(this@DocumentScanActivity).apply {
+                setImageResource(R.drawable.zbn_helipad_night)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                alpha = 0.72f
+                contentDescription = null
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, FrameLayout.LayoutParams(-1, dp(300), Gravity.BOTTOM))
+            addView(View(this@DocumentScanActivity).apply {
+                setBackgroundColor(Color.argb(45, 8, 10, 13))
+            }, FrameLayout.LayoutParams(-1, dp(300), Gravity.BOTTOM))
+            addView(reviewImage, FrameLayout.LayoutParams(-1, -1).apply {
+                bottomMargin = dp(200)
+            })
             val controls = LinearLayout(this@DocumentScanActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 filterStatus = TextView(context).apply {
@@ -200,7 +211,9 @@ class DocumentScanActivity : AppCompatActivity() {
                     }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginStart = dp(5) })
                 }, LinearLayout.LayoutParams(-1, dp(65)))
             }
-            addView(controlsBackdrop(controls), LinearLayout.LayoutParams(-1, dp(139)))
+            addView(controls, FrameLayout.LayoutParams(-1, dp(139), Gravity.BOTTOM).apply {
+                bottomMargin = dp(54)
+            })
         }
         root.addView(reviewPanel, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
