@@ -209,16 +209,24 @@ class DocumentScanActivity : AppCompatActivity() {
                         try {
                             val bitmap = loadOriented(rawFile)
                             val detection = DocumentProcessor.detectCorners(bitmap)
+                            val automaticResult = if (detection.edgesFound) {
+                                DocumentProcessor.cropAndEnhance(bitmap, detection.corners)
+                            } else {
+                                null
+                            }
                             rawFile.delete()
                             runOnUiThread {
                                 sourceBitmap = bitmap
                                 cropView.setDocument(bitmap, detection.corners)
-                                editorPanel.visibility = View.VISIBLE
                                 progress.visibility = View.GONE
-                                status.text = if (detection.edgesFound) {
-                                    "Проверьте найденные углы"
+                                if (automaticResult != null) {
+                                    processedBitmap = automaticResult
+                                    reviewImage.setImageBitmap(automaticResult)
+                                    reviewPanel.visibility = View.VISIBLE
+                                    status.text = "Документ найден и выровнен"
                                 } else {
-                                    "Углы не найдены автоматически"
+                                    editorPanel.visibility = View.VISIBLE
+                                    status.text = "Уточните углы документа"
                                 }
                             }
                         } catch (error: Exception) {

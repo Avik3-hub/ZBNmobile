@@ -13,6 +13,21 @@ android {
         targetSdk = 34
         versionCode = System.getenv("ZBN_VERSION_CODE")?.toIntOrNull() ?: 2
         versionName = "1.2.1"
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
     }
 
     compileOptions {

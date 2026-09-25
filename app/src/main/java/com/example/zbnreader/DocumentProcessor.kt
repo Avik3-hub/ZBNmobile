@@ -2,6 +2,7 @@ package com.example.zbnreader
 
 import android.graphics.Bitmap
 import org.opencv.android.Utils
+import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.MatOfPoint2f
@@ -86,17 +87,27 @@ object DocumentProcessor {
         val warped = Mat()
         Imgproc.warpPerspective(rgba, warped, transform, Size(width.toDouble(), height.toDouble()))
 
-        val scanned = Mat()
-        Imgproc.cvtColor(warped, scanned, Imgproc.COLOR_RGBA2GRAY)
-        Imgproc.adaptiveThreshold(
-            scanned, scanned, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
-            Imgproc.THRESH_BINARY, 31, 12.0
-        )
-        val output = Bitmap.createBitmap(scanned.cols(), scanned.rows(), Bitmap.Config.ARGB_8888)
-        Utils.matToBitmap(scanned, output)
+        val rgb = Mat()
+        val lab = Mat()
+        Imgproc.cvtColor(warped, rgb, Imgproc.COLOR_RGBA2RGB)
+        Imgproc.cvtColor(rgb, lab, Imgproc.COLOR_RGB2Lab)
+        val channels = mutableListOf<Mat>()
+        Core.split(lab, channels)
+        val clahe = Imgproc.createCLAHE(2.5, Size(8.0, 8.0))
+        clahe.apply(channels[0], channels[0])
+        Core.merge(channels, lab)
+        val enhancedRgb = Mat()
+        val enhanced = Mat()
+        Imgproc.cvtColor(lab, enhancedRgb, Imgproc.COLOR_Lab2RGB)
+        Imgproc.cvtColor(enhancedRgb, enhanced, Imgproc.COLOR_RGB2RGBA)
+        val output = Bitmap.createBitmap(enhanced.cols(), enhanced.rows(), Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(enhanced, output)
 
         rgba.release(); sourceCorners.release(); targetCorners.release()
-        transform.release(); warped.release(); scanned.release()
+        transform.release(); warped.release(); rgb.release(); lab.release()
+        enhancedRgb.release(); enhanced.release()
+        channels.forEach { it.release() }
+        clahe.collectGarbage()
         return output
     }
 
