@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Matrix
+import android.media.MediaScannerConnection
 import android.os.Bundle
 import android.os.Environment
 import android.util.Size
@@ -344,6 +345,12 @@ class DocumentScanActivity : AppCompatActivity() {
             FileOutputStream(output).use { stream ->
                 if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 88, stream)) error("JPEG не записан")
             }
+            MediaScannerConnection.scanFile(
+                this,
+                arrayOf(output.absolutePath),
+                arrayOf("image/jpeg"),
+                null
+            )
             Toast.makeText(this, "Сохранено: ${output.absolutePath}", Toast.LENGTH_LONG).show()
             finish()
         } catch (error: Exception) {

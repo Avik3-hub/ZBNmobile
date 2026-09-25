@@ -42,16 +42,17 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
-    // Цветовая палитра в стиле Google Gemini (Dark Theme)
-    private val COLOR_BG = Color.parseColor("#131314")
-    private val COLOR_SURFACE = Color.parseColor("#1E1F20")
-    private val COLOR_SURFACE_CONTAINER = Color.parseColor("#28292A")
+    // Тёмная авиационная палитра: AMOLED, графит, холодный голубой и янтарный акцент.
+    private val COLOR_BG = Color.parseColor("#080A0D")
+    private val COLOR_SURFACE = Color.parseColor("#14181D")
+    private val COLOR_SURFACE_CONTAINER = Color.parseColor("#20262D")
     private val COLOR_ACCENT = Color.parseColor("#A8C7FA")
-    private val COLOR_ACCENT_TEXT = Color.parseColor("#041E49")
-    private val COLOR_TEXT = Color.parseColor("#E3E3E3")
-    private val COLOR_TEXT_MUTED = Color.parseColor("#757775")
-    private val COLOR_BORDER = Color.parseColor("#444746")
-    private val COLOR_DISABLED_BG = Color.parseColor("#181819")
+    private val COLOR_ACCENT_TEXT = Color.parseColor("#071526")
+    private val COLOR_AMBER = Color.parseColor("#F1B45B")
+    private val COLOR_TEXT = Color.parseColor("#F2F5F7")
+    private val COLOR_TEXT_MUTED = Color.parseColor("#89929C")
+    private val COLOR_BORDER = Color.parseColor("#343C45")
+    private val COLOR_DISABLED_BG = Color.parseColor("#101317")
 
     // Статусные цвета для строк таблицы
     private val COLOR_DOWNLOADED = Color.parseColor("#1A3852")
@@ -127,51 +128,78 @@ class MainActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(20, 20, 20, 20)
+            setPadding(dp(12), dp(10), dp(12), dp(8))
             setBackgroundColor(COLOR_BG)
         }
 
-        // 1. ВЕРХНЯЯ ПАНЕЛЬ
-        val topPanel = LinearLayout(this).apply {
+        // 1. ШАПКА И СТАТУС
+        val appHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, 12)
+            setPadding(dp(4), dp(2), 0, dp(8))
         }
-        tvStatus = TextView(this).apply {
-            text = "Статус: Подключите ЗБН и нажмите «Начать сканирование»"
-            textSize = 12f
-            setTextColor(COLOR_TEXT_MUTED)
-            maxLines = 2
+        val titleBlock = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                setMargins(0, 0, 12, 0)
+                marginEnd = dp(10)
             }
         }
+        titleBlock.addView(TextView(this).apply {
+            text = "ZBN mobile"
+            textSize = 24f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(COLOR_TEXT)
+        })
+        titleBlock.addView(TextView(this).apply {
+            text = "СНЯТИЕ ПОЛЁТНОЙ ИНФОРМАЦИИ"
+            textSize = 10f
+            letterSpacing = 0.08f
+            setTextColor(COLOR_AMBER)
+        })
         val btnSettings = Button(this).apply {
             text = "Настройки"
-            textSize = 12f
+            textSize = 11f
             setTextColor(COLOR_TEXT)
-            background = createRoundedDrawable(COLOR_SURFACE, 18f, COLOR_BORDER, 1)
+            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 18f, COLOR_BORDER, 1)
+            minHeight = 0
+            minimumHeight = 0
+            setPadding(dp(16), dp(11), dp(16), dp(11))
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
         }
-        topPanel.addView(tvStatus)
-        topPanel.addView(btnSettings)
-        root.addView(topPanel)
+        appHeader.addView(titleBlock)
+        appHeader.addView(btnSettings)
+        root.addView(appHeader)
+
+        tvStatus = TextView(this).apply {
+            text = "Подключите ЗБН и нажмите «Начать сканирование»"
+            textSize = 12f
+            setTextColor(COLOR_TEXT_MUTED)
+            maxLines = 2
+            setPadding(dp(14), dp(11), dp(14), dp(11))
+            background = createRoundedDrawable(COLOR_SURFACE, 16f, COLOR_BORDER, 1)
+        }
+        root.addView(tvStatus, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(10) })
 
         // 2. КНОПКА СТАРТА
         btnStart = Button(this).apply {
             text = "НАЧАТЬ СКАНИРОВАНИЕ"
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
-            setPadding(16, 26, 16, 26)
+            minHeight = 0
+            minimumHeight = 0
+            setPadding(dp(16), dp(16), dp(16), dp(16))
             setOnClickListener { startReading() }
         }
         setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
         val startParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { setMargins(0, 0, 0, 14) }
+        ).apply { setMargins(0, 0, 0, dp(10)) }
         btnStart.layoutParams = startParams
         root.addView(btnStart)
 
@@ -181,13 +209,21 @@ class MainActivity : AppCompatActivity() {
             background = createRoundedDrawable(COLOR_SURFACE, 20f)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-            ).apply { setMargins(0, 0, 0, 14) }
-            setPadding(10, 10, 10, 10)
+            ).apply { setMargins(0, 0, 0, dp(10)) }
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
+        tableCard.addView(TextView(this).apply {
+            text = "ВКЛЮЧЕНИЯ ЗБН"
+            textSize = 10f
+            letterSpacing = 0.08f
+            setTextColor(COLOR_AMBER)
+            setPadding(dp(6), dp(3), dp(6), dp(7))
+        })
         val scrollTable = HorizontalScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT
+                0,
+                1f
             )
         }
         val verticalScroll = ScrollView(this)
@@ -212,10 +248,10 @@ class MainActivity : AppCompatActivity() {
         val actionPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 14)
+            setPadding(0, 0, 0, dp(10))
         }
-        val btnParams = LinearLayout.LayoutParams(0, 110, 1f).apply {
-            setMargins(4, 0, 4, 0)
+        val btnParams = LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+            setMargins(dp(3), 0, dp(3), 0)
         }
         btnCopySelected = Button(this).apply {
             text = "Копировать"
@@ -251,9 +287,9 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             background = createRoundedDrawable(COLOR_SURFACE, 20f)
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 200
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(82)
             )
-            setPadding(10, 10, 10, 10)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
         }
         val scrollViewLog = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -302,20 +338,23 @@ class MainActivity : AppCompatActivity() {
             adapter = StaticPagesAdapter(listOf(screen, scanPage))
             offscreenPageLimit = 1
         }
-        val firstDot = pageDot(true)
-        val secondDot = pageDot(false)
+        val firstTab = pageTab("Снятие ПИ", true)
+        val secondTab = pageTab("Паспорт БУР-1", false)
         val pageIndicator = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, 5, 0, 7)
-            setBackgroundColor(COLOR_BG)
-            addView(firstDot)
-            addView(secondDot)
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            background = createRoundedDrawable(COLOR_SURFACE, 22f, COLOR_BORDER, 1)
+            elevation = dp(8).toFloat()
+            addView(firstTab)
+            addView(secondTab)
         }
+        firstTab.setOnClickListener { pager.setCurrentItem(0, true) }
+        secondTab.setOnClickListener { pager.setCurrentItem(1, true) }
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
-                firstDot.setTextColor(if (position == 0) COLOR_ACCENT else COLOR_BORDER)
-                secondDot.setTextColor(if (position == 1) COLOR_ACCENT else COLOR_BORDER)
+                stylePageTab(firstTab, position == 0)
+                stylePageTab(secondTab, position == 1)
                 if (position == 1) scanPage.refresh()
             }
         })
@@ -328,7 +367,9 @@ class MainActivity : AppCompatActivity() {
             addView(pageIndicator, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ))
+            ).apply {
+                setMargins(dp(12), dp(4), dp(12), dp(10))
+            })
         })
         renderTableHeader()
         log("Приложение запущено. Готовность к работе.")
@@ -897,14 +938,28 @@ class MainActivity : AppCompatActivity() {
             .apply()
     }
 
-    private fun pageDot(selected: Boolean) = TextView(this).apply {
-        text = "●"
+    private fun pageTab(label: String, selected: Boolean) = TextView(this).apply {
+        text = label
         textSize = 13f
+        setTypeface(null, Typeface.BOLD)
         gravity = Gravity.CENTER
-        setTextColor(if (selected) COLOR_ACCENT else COLOR_BORDER)
-        layoutParams = LinearLayout.LayoutParams(32, LinearLayout.LayoutParams.WRAP_CONTENT)
-        contentDescription = if (selected) "Страница ЗБН" else "Страница сканера"
+        minHeight = dp(46)
+        layoutParams = LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+            setMargins(dp(2), 0, dp(2), 0)
+        }
+        stylePageTab(this, selected)
     }
+
+    private fun stylePageTab(tab: TextView, selected: Boolean) {
+        tab.setTextColor(if (selected) COLOR_ACCENT_TEXT else COLOR_TEXT_MUTED)
+        tab.background = if (selected) {
+            createRoundedDrawable(COLOR_ACCENT, 18f)
+        } else {
+            createRoundedDrawable(Color.TRANSPARENT, 18f)
+        }
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private class StaticPagesAdapter(private val pages: List<View>) :
         RecyclerView.Adapter<StaticPagesAdapter.PageHolder>() {

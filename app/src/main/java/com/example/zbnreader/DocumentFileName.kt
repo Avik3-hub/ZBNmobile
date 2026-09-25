@@ -25,6 +25,6 @@ object DocumentFileName {
         val datePart = SimpleDateFormat("yyyyMMdd", Locale.US).format(date)
         val tailPart = normalizeTailNumber(tailNumber).ifEmpty { "БОРТ" }
         val surnamePart = normalizeSurname(surname).ifEmpty { "ФАМИЛИЯ" }
-        return "${datePart}_${tailPart}_${surnamePart}.jpeg"
+        return "${datePart}_${tailPart}_${surnamePart}.jpg"
     }
 }
