@@ -46,9 +46,15 @@ jobs:
           signer_path=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
           "$signer_path" verify --print-certs app/build/outputs/apk/release/app-release.apk
 
+      - name: Give APK a unique name
+        shell: bash
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk \
+            "app/build/outputs/apk/release/ZBNmobile-1.2.4-build-${{ github.run_number }}.apk"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZbnReader-arm64-release
-          path: app/build/outputs/apk/release/app-release.apk
+          name: ZBNmobile-1.2.4-build-${{ github.run_number }}
+          path: app/build/outputs/apk/release/ZBNmobile-1.2.4-build-${{ github.run_number }}.apk
           retention-days: 7

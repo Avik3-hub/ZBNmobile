@@ -110,13 +110,19 @@ object DocumentProcessor {
         Core.divide(channels[0], illumination, correctedLight, 255.0)
         val clahe = Imgproc.createCLAHE(1.8, Size(8.0, 8.0))
         clahe.apply(correctedLight, channels[0])
-        channels[0].convertTo(channels[0], -1, 1.12, 10.0)
+        channels[0].convertTo(channels[0], -1, 1.32, -48.0)
 
-        // Neutralize the paper while retaining enough chroma for stamps and ink.
-        channels[1].convertTo(channels[1], -1, 0.72, 35.84)
-        channels[2].convertTo(channels[2], -1, 0.72, 35.84)
+        // Whiten only bright neutral paper. Colored stamp strokes must not enter this mask.
+        val lightMask = Mat()
+        val neutralMask = Mat()
         val whiteMask = Mat()
-        Imgproc.threshold(channels[0], whiteMask, 224.0, 255.0, Imgproc.THRESH_BINARY)
+        Imgproc.threshold(channels[0], lightMask, 218.0, 255.0, Imgproc.THRESH_BINARY)
+        Core.inRange(lab, Scalar(0.0, 119.0, 119.0), Scalar(255.0, 137.0, 137.0), neutralMask)
+        Core.bitwise_and(lightMask, neutralMask, whiteMask)
+
+        // Increase color separation so pale blue and violet stamps remain legible.
+        channels[1].convertTo(channels[1], -1, 1.18, -23.04)
+        channels[2].convertTo(channels[2], -1, 1.18, -23.04)
         channels[0].setTo(Scalar(255.0), whiteMask)
         channels[1].setTo(Scalar(128.0), whiteMask)
         channels[2].setTo(Scalar(128.0), whiteMask)
@@ -131,7 +137,8 @@ object DocumentProcessor {
         rgba.release(); sourceCorners.release(); targetCorners.release()
         transform.release(); warped.release(); rgb.release(); lab.release()
         enhancedRgb.release(); enhanced.release()
-        illumination.release(); correctedLight.release(); whiteMask.release()
+        illumination.release(); correctedLight.release(); lightMask.release()
+        neutralMask.release(); whiteMask.release()
         channels.forEach { it.release() }
         clahe.collectGarbage()
         return output
