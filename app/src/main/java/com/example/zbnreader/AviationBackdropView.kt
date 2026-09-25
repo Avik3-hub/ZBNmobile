@@ -9,7 +9,7 @@ import android.view.View
 /** Quiet blueprint-style decoration. It never handles input and has no app logic. */
 class AviationBackdropView(context: Context) : View(context) {
     private val blue = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#182A3D")
+        color = Color.parseColor("#101A24")
         style = Paint.Style.STROKE
         strokeWidth = dp(1f)
     }
@@ -24,7 +24,7 @@ class AviationBackdropView(context: Context) : View(context) {
     }
 
     private fun drawGrid(canvas: Canvas) {
-        val step = dp(28f)
+        val step = dp(42f)
         var x = 0f
         while (x < width) {
             canvas.drawLine(x, 0f, x, height.toFloat(), blue)

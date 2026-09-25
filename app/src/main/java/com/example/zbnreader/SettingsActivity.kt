@@ -92,7 +92,7 @@ class SettingsActivity : AppCompatActivity() {
             text = "Показывать помощника Ми-171"
             textSize = 14f
             setTextColor(COLOR_TEXT)
-            isChecked = prefs.getBoolean("mi171_pet_enabled", true)
+            isChecked = prefs.getBoolean("mi171_pet_enabled", false)
             setPadding(0, 20, 0, 12)
         }
 

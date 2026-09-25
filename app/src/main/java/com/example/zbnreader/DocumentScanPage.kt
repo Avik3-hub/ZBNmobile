@@ -3,7 +3,6 @@ package com.example.zbnreader
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
 import android.text.TextWatcher
@@ -50,7 +49,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             addView(TextView(context).apply {
                 text = "Паспорт БУР-1"
                 textSize = 26f
-                setTypeface(null, Typeface.BOLD)
+                typeface = resources.getFont(R.font.zbn_sans_bold)
                 setTextColor(textColor)
             }, fullWidth(bottom = 3))
             addView(TextView(context).apply {
@@ -66,7 +65,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         header.addView(ImageView(context).apply {
             setImageResource(R.drawable.zbn_blueprint_mi171)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            alpha = 0.42f
+            alpha = 0.68f
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         }, FrameLayout.LayoutParams(dp(152), dp(78), Gravity.END or Gravity.TOP).apply {
@@ -84,7 +83,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         aircraftCard.addView(label("ПОСЛЕДНИЙ БОРТ", amberColor))
         tailValue.apply {
             textSize = 22f
-            setTypeface(null, Typeface.BOLD)
+            typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentColor)
             setPadding(0, dp(5), 0, 0)
         }
@@ -129,7 +128,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         settingsCard.addView(label("БУДЕТ СОХРАНЕНО КАК"), fullWidth(bottom = 6))
         fileNamePreview.apply {
             textSize = 14f
-            setTypeface(null, Typeface.BOLD)
+            typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentColor)
             setPadding(dp(14), dp(13), dp(14), dp(13))
             background = rounded(fieldColor, 14f, borderColor)
@@ -140,7 +139,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         val scanButton = Button(context).apply {
             text = "СФОТОГРАФИРОВАТЬ ДОКУМЕНТ"
             textSize = 14f
-            setTypeface(null, Typeface.BOLD)
+            typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentTextColor)
             minHeight = 0
             minimumHeight = 0
@@ -163,7 +162,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
 
         addView(ImageView(context).apply {
             setImageResource(R.drawable.zbn_helipad_night)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            scaleType = ImageView.ScaleType.FIT_END
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {

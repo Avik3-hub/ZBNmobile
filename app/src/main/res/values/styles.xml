@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ZBNmobile" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:fontFamily">@font/zbn_sans</item>
+        <item name="fontFamily">@font/zbn_sans</item>
+        <item name="colorPrimary">#A8C7FA</item>
+        <item name="colorPrimaryVariant">#7897C5</item>
+        <item name="colorAccent">#A8C7FA</item>
+        <item name="android:colorAccent">#A8C7FA</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#080A0D</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

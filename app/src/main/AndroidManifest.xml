@@ -28,7 +28,7 @@
         android:label="ZBN mobile"
         android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
+        android:theme="@style/Theme.ZBNmobile">
 
         <!-- Провайдер для передачи файлов -->
         <provider

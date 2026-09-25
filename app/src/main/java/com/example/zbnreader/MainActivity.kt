@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.usb.UsbManager
 import android.net.Uri
@@ -147,7 +146,7 @@ class MainActivity : AppCompatActivity() {
         titleBlock.addView(TextView(this).apply {
             text = "ZBN mobile"
             textSize = 24f
-            setTypeface(null, Typeface.BOLD)
+            typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(COLOR_TEXT)
         })
         titleBlock.addView(TextView(this).apply {
@@ -157,13 +156,17 @@ class MainActivity : AppCompatActivity() {
             setTextColor(COLOR_AMBER)
         })
         val btnSettings = Button(this).apply {
-            text = "Настройки"
-            textSize = 11f
+            text = "⋮"
+            textSize = 24f
             setTextColor(COLOR_TEXT)
-            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 18f, COLOR_BORDER, 1)
+            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 24f, COLOR_BORDER, 1)
             minHeight = 0
             minimumHeight = 0
-            setPadding(dp(16), dp(11), dp(16), dp(11))
+            minWidth = 0
+            minimumWidth = 0
+            gravity = Gravity.CENTER
+            contentDescription = "Настройки"
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
@@ -172,15 +175,40 @@ class MainActivity : AppCompatActivity() {
         appHeader.addView(btnSettings)
         root.addView(appHeader)
 
+        val statusCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(9), dp(12), dp(9))
+            background = createRoundedDrawable(COLOR_SURFACE, 16f, COLOR_BORDER, 1)
+        }
+        statusCard.addView(TextView(this).apply {
+            text = "USB"
+            textSize = 9f
+            typeface = resources.getFont(R.font.zbn_sans_bold)
+            setTextColor(COLOR_ACCENT)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(dp(38), dp(30)))
         tvStatus = TextView(this).apply {
             text = "Подключите ЗБН и нажмите «Начать сканирование»"
             textSize = 12f
             setTextColor(COLOR_TEXT_MUTED)
             maxLines = 2
-            setPadding(dp(14), dp(11), dp(14), dp(11))
-            background = createRoundedDrawable(COLOR_SURFACE, 16f, COLOR_BORDER, 1)
+            setPadding(dp(5), 0, dp(6), 0)
         }
-        root.addView(tvStatus, LinearLayout.LayoutParams(
+        statusCard.addView(tvStatus, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f
+        ))
+        statusCard.addView(TextView(this).apply {
+            text = "!"
+            textSize = 13f
+            typeface = resources.getFont(R.font.zbn_sans_bold)
+            setTextColor(COLOR_AMBER)
+            gravity = Gravity.CENTER
+            background = createRoundedDrawable(Color.TRANSPARENT, 14f, COLOR_AMBER, 1)
+        }, LinearLayout.LayoutParams(dp(28), dp(28)))
+        root.addView(statusCard, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(10) })
@@ -189,7 +217,7 @@ class MainActivity : AppCompatActivity() {
         btnStart = Button(this).apply {
             text = "НАЧАТЬ СКАНИРОВАНИЕ"
             textSize = 14f
-            setTypeface(null, Typeface.BOLD)
+            typeface = resources.getFont(R.font.zbn_sans_bold)
             minHeight = 0
             minimumHeight = 0
             setPadding(dp(16), dp(16), dp(16), dp(16))
@@ -485,10 +513,15 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (::mi171Pet.isInitialized) {
-            val enabled = getSharedPreferences("AppSettings", MODE_PRIVATE)
-                .getBoolean("mi171_pet_enabled", true)
-            mi171Pet.setSmallSize(getSharedPreferences("AppSettings", MODE_PRIVATE)
-                .getBoolean("mi171_pet_small", false))
+            val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+            if (!prefs.getBoolean("visual_refresh_pet_default_applied", false)) {
+                prefs.edit()
+                    .putBoolean("mi171_pet_enabled", false)
+                    .putBoolean("visual_refresh_pet_default_applied", true)
+                    .apply()
+            }
+            val enabled = prefs.getBoolean("mi171_pet_enabled", false)
+            mi171Pet.setSmallSize(prefs.getBoolean("mi171_pet_small", false))
             mi171Pet.setPetEnabled(enabled)
             petSpeech.setHelperEnabled(enabled)
             refreshPetUsb()
@@ -584,7 +617,7 @@ class MainActivity : AppCompatActivity() {
             val tv = TextView(this).apply {
                 text = col
                 textSize = 12f
-                setTypeface(null, Typeface.BOLD)
+                typeface = resources.getFont(R.font.zbn_sans_bold)
                 setTextColor(COLOR_ACCENT)
                 setPadding(10, 4, 10, 4)
                 gravity = Gravity.CENTER
@@ -954,7 +987,7 @@ class MainActivity : AppCompatActivity() {
     private fun pageTab(label: String, selected: Boolean) = TextView(this).apply {
         text = label
         textSize = 11.5f
-        setTypeface(null, Typeface.BOLD)
+        typeface = resources.getFont(R.font.zbn_sans_bold)
         gravity = Gravity.CENTER
         minHeight = dp(34)
         layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f).apply {
