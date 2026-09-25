@@ -17,7 +17,8 @@ class A4GuideView(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        val horizontalPadding = 28f * resources.displayMetrics.density
+        // Leave breathing room around the whole A4 outline inside the 4:3 preview.
+        val horizontalPadding = 48f * resources.displayMetrics.density
         val verticalPadding = 96f * resources.displayMetrics.density
         val maxWidth = (width - horizontalPadding * 2).coerceAtLeast(1f)
         val maxHeight = (height - verticalPadding * 2).coerceAtLeast(1f)

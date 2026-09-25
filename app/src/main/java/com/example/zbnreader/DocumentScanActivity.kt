@@ -90,7 +90,11 @@ class DocumentScanActivity : AppCompatActivity() {
 
     private fun buildUi() {
         val root = FrameLayout(this).apply { setBackgroundColor(uiBackground) }
-        previewView = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
+        previewView = PreviewView(this).apply {
+            scaleType = PreviewView.ScaleType.FIT_CENTER
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            setBackgroundColor(uiBackground)
+        }
         root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
 
         status = TextView(this).apply {
@@ -356,12 +360,13 @@ class DocumentScanActivity : AppCompatActivity() {
 
     /** Uniformly enlarges the artwork while keeping its lower edge anchored. */
     private fun helipadImage(alphaValue: Float, zoom: Float) = ImageView(this).apply {
-        setImageResource(R.drawable.zbn_helipad_night)
+        setImageResource(if (palette.isLight) {
+            R.drawable.zbn_helipad_light
+        } else {
+            R.drawable.zbn_helipad_night
+        })
         scaleType = ImageView.ScaleType.CENTER_CROP
-        alpha = if (palette.isLight) alphaValue * 0.58f else alphaValue
-        if (palette.isLight) {
-            setColorFilter(palette.background, android.graphics.PorterDuff.Mode.SCREEN)
-        }
+        alpha = alphaValue
         contentDescription = null
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         post {

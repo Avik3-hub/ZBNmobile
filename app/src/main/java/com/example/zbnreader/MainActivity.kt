@@ -381,10 +381,13 @@ class MainActivity : AppCompatActivity() {
         val lowerPanel = FrameLayout(this).apply {
             clipChildren = false
             addView(ImageView(this@MainActivity).apply {
-                setImageResource(R.drawable.zbn_perspective_grid)
+                setImageResource(if (palette.isLight) {
+                    R.drawable.zbn_perspective_grid_light
+                } else {
+                    R.drawable.zbn_perspective_grid
+                })
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                alpha = if (palette.isLight) 0.56f else 0.82f
-                if (palette.isLight) setColorFilter(palette.background, PorterDuff.Mode.SCREEN)
+                alpha = if (palette.isLight) 0.88f else 0.82f
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, FrameLayout.LayoutParams(

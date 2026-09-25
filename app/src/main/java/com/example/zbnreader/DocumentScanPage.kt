@@ -69,7 +69,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         }
         header.addView(ImageView(context).apply {
             setImageResource(R.drawable.zbn_blueprint_mi171_front)
-            scaleType = ImageView.ScaleType.FIT_CENTER
+            scaleType = ImageView.ScaleType.FIT_END
             setColorFilter(palette.blueprint, PorterDuff.Mode.SRC_ATOP)
             alpha = 0.92f
             contentDescription = null
@@ -186,10 +186,13 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         addView(scanButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)))
 
         addView(ImageView(context).apply {
-            setImageResource(R.drawable.zbn_helipad_night)
+            setImageResource(if (palette.isLight) {
+                R.drawable.zbn_helipad_light
+            } else {
+                R.drawable.zbn_helipad_night
+            })
             scaleType = ImageView.ScaleType.FIT_END
-            alpha = if (palette.isLight) 0.40f else 1f
-            if (palette.isLight) setColorFilter(palette.background, PorterDuff.Mode.SCREEN)
+            alpha = if (palette.isLight) 0.88f else 1f
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {
