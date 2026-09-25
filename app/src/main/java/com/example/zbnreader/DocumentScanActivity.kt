@@ -452,6 +452,7 @@ class DocumentScanActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
         worker.shutdown()
