@@ -7,6 +7,7 @@ import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.MatOfPoint2f
 import org.opencv.core.Point
+import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import kotlin.math.hypot
@@ -40,8 +41,8 @@ object DocumentProcessor {
         Imgproc.morphologyEx(whiteMask, whiteMask, Imgproc.MORPH_CLOSE, closeKernel)
         val whiteContours = mutableListOf<MatOfPoint>()
         Imgproc.findContours(whiteMask, whiteContours, Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
-        val corners = findDocument(whiteContours, imageArea, scale)
-            ?: findDocument(edgeContours, imageArea, scale)
+        val corners = findDocument(whiteContours, imageArea, scale, gray)
+            ?: findDocument(edgeContours, imageArea, scale, gray)
 
         val fallbackX = rgba.cols() * 0.08
         val fallbackY = rgba.rows() * 0.08
@@ -103,8 +104,22 @@ object DocumentProcessor {
         Imgproc.cvtColor(rgb, lab, Imgproc.COLOR_RGB2Lab)
         val channels = mutableListOf<Mat>()
         Core.split(lab, channels)
-        val clahe = Imgproc.createCLAHE(2.5, Size(8.0, 8.0))
-        clahe.apply(channels[0], channels[0])
+        val illumination = Mat()
+        Imgproc.GaussianBlur(channels[0], illumination, Size(0.0, 0.0), 35.0)
+        val correctedLight = Mat()
+        Core.divide(channels[0], illumination, correctedLight, 255.0)
+        val clahe = Imgproc.createCLAHE(1.8, Size(8.0, 8.0))
+        clahe.apply(correctedLight, channels[0])
+        channels[0].convertTo(channels[0], -1, 1.12, 10.0)
+
+        // Neutralize the paper while retaining enough chroma for stamps and ink.
+        channels[1].convertTo(channels[1], -1, 0.72, 35.84)
+        channels[2].convertTo(channels[2], -1, 0.72, 35.84)
+        val whiteMask = Mat()
+        Imgproc.threshold(channels[0], whiteMask, 224.0, 255.0, Imgproc.THRESH_BINARY)
+        channels[0].setTo(Scalar(255.0), whiteMask)
+        channels[1].setTo(Scalar(128.0), whiteMask)
+        channels[2].setTo(Scalar(128.0), whiteMask)
         Core.merge(channels, lab)
         val enhancedRgb = Mat()
         val enhanced = Mat()
@@ -116,6 +131,7 @@ object DocumentProcessor {
         rgba.release(); sourceCorners.release(); targetCorners.release()
         transform.release(); warped.release(); rgb.release(); lab.release()
         enhancedRgb.release(); enhanced.release()
+        illumination.release(); correctedLight.release(); whiteMask.release()
         channels.forEach { it.release() }
         clahe.collectGarbage()
         return output
@@ -124,7 +140,8 @@ object DocumentProcessor {
     private fun findDocument(
         contours: List<MatOfPoint>,
         imageArea: Double,
-        scale: Double
+        scale: Double,
+        gray: Mat
     ): Array<Point>? {
         var best: Array<Point>? = null
         var bestScore = 0.0
@@ -138,11 +155,25 @@ object DocumentProcessor {
             val polygon = MatOfPoint(*approx.toArray())
             if (approx.total() == 4L && Imgproc.isContourConvex(polygon)) {
                 val ordered = order(approx.toArray())
+                val border = minOf(gray.cols(), gray.rows()) * 0.035
+                val borderPoints = ordered.count {
+                    it.x < border || it.y < border ||
+                        it.x > gray.cols() - border || it.y > gray.rows() - border
+                }
+                if (borderPoints >= 2) {
+                    polygon.release(); curve.release(); approx.release()
+                    continue
+                }
                 val width = max(distance(ordered[0], ordered[1]), distance(ordered[3], ordered[2]))
                 val height = max(distance(ordered[0], ordered[3]), distance(ordered[1], ordered[2]))
                 val ratio = minOf(width, height) / max(width, height)
                 if (ratio in 0.48..0.88) {
-                    val score = area * (1.0 - kotlin.math.abs(ratio - 0.707) * 0.35)
+                    val mask = Mat.zeros(gray.size(), org.opencv.core.CvType.CV_8UC1)
+                    Imgproc.fillConvexPoly(mask, polygon, Scalar(255.0))
+                    val brightness = Core.mean(gray, mask).`val`[0] / 255.0
+                    mask.release()
+                    val a4Fit = 1.0 - kotlin.math.abs(ratio - 0.707).coerceAtMost(0.3)
+                    val score = area * Math.pow(brightness, 5.0) * a4Fit
                     if (score > bestScore) {
                         bestScore = score
                         best = ordered.map { Point(it.x / scale, it.y / scale) }.toTypedArray()
