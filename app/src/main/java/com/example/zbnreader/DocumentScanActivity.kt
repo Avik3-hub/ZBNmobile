@@ -91,8 +91,6 @@ class DocumentScanActivity : AppCompatActivity() {
         previewView = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
         root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
 
-        root.addView(A4GuideView(this), FrameLayout.LayoutParams(-1, -1))
-
         status = TextView(this).apply {
             text = "Расположите документ внутри рамки"
             textSize = 13f
@@ -117,6 +115,9 @@ class DocumentScanActivity : AppCompatActivity() {
             })
         }
         root.addView(controlsBackdrop(captureControls), FrameLayout.LayoutParams(-1, dp(196), Gravity.BOTTOM))
+
+        // Draw after the lower dock so its bottom edge cannot hide the A4 outline.
+        root.addView(A4GuideView(this), FrameLayout.LayoutParams(-1, -1))
 
         progress = ProgressBar(this).apply { visibility = View.GONE }
         root.addView(progress, FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER))
@@ -161,13 +162,8 @@ class DocumentScanActivity : AppCompatActivity() {
         reviewPanel = FrameLayout(this).apply {
             visibility = View.GONE
             setBackgroundColor(uiBackground)
-            addView(ImageView(this@DocumentScanActivity).apply {
-                setImageResource(R.drawable.zbn_helipad_night)
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                alpha = 0.72f
-                contentDescription = null
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, FrameLayout.LayoutParams(-1, dp(300), Gravity.BOTTOM))
+            addView(helipadImage(alphaValue = 0.72f, zoom = 2.45f),
+                FrameLayout.LayoutParams(-1, dp(300), Gravity.BOTTOM))
             addView(View(this@DocumentScanActivity).apply {
                 setBackgroundColor(Color.argb(45, 8, 10, 13))
             }, FrameLayout.LayoutParams(-1, dp(300), Gravity.BOTTOM))
@@ -339,17 +335,26 @@ class DocumentScanActivity : AppCompatActivity() {
 
     private fun controlsBackdrop(content: View): FrameLayout = FrameLayout(this).apply {
         setBackgroundColor(uiBackground)
-        addView(ImageView(this@DocumentScanActivity).apply {
-            setImageResource(R.drawable.zbn_helipad_night)
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            alpha = 0.34f
-            contentDescription = null
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, FrameLayout.LayoutParams(-1, -1))
+        addView(helipadImage(alphaValue = 0.34f, zoom = 2.15f), FrameLayout.LayoutParams(-1, -1))
         addView(View(this@DocumentScanActivity).apply {
             setBackgroundColor(Color.argb(92, 8, 10, 13))
         }, FrameLayout.LayoutParams(-1, -1))
         addView(content, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    /** Uniformly enlarges the artwork while keeping its lower edge anchored. */
+    private fun helipadImage(alphaValue: Float, zoom: Float) = ImageView(this).apply {
+        setImageResource(R.drawable.zbn_helipad_night)
+        scaleType = ImageView.ScaleType.CENTER_CROP
+        alpha = alphaValue
+        contentDescription = null
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        post {
+            pivotX = width / 2f
+            pivotY = height.toFloat()
+            scaleX = zoom
+            scaleY = zoom
+        }
     }
 
     private fun stylePrimaryButton(button: Button) = button.apply {

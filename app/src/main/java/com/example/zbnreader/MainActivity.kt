@@ -396,11 +396,11 @@ class MainActivity : AppCompatActivity() {
             ))
             addView(ImageView(this@MainActivity).apply {
                 setImageResource(R.drawable.zbn_mi171_scene)
-                scaleType = ImageView.ScaleType.FIT_CENTER
+                scaleType = ImageView.ScaleType.FIT_END
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, FrameLayout.LayoutParams(dp(320), dp(136), Gravity.END or Gravity.BOTTOM).apply {
-                marginEnd = dp(24)
+                marginEnd = 0
                 bottomMargin = dp(-7)
             })
         }
