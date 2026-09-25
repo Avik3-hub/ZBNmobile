@@ -43,11 +43,14 @@ class DocumentScanActivity : AppCompatActivity() {
     private lateinit var cropView: DocumentCropView
     private lateinit var reviewPanel: LinearLayout
     private lateinit var reviewImage: ImageView
+    private lateinit var filterStatus: TextView
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
     private var imageCapture: ImageCapture? = null
     private var sourceBitmap: Bitmap? = null
     private var processedBitmap: Bitmap? = null
+    private var currentCorners: Array<org.opencv.core.Point>? = null
+    private var processingFilter = false
     private val worker = Executors.newSingleThreadExecutor()
 
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -74,19 +77,10 @@ class DocumentScanActivity : AppCompatActivity() {
 
     private fun buildUi() {
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        previewView = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
+        previewView = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
         root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
 
-        val guide = View(this).apply {
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.TRANSPARENT)
-                setStroke(dp(2), Color.parseColor("#A8C7FA"))
-                cornerRadius = dp(6).toFloat()
-            }
-        }
-        root.addView(guide, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER).apply {
-            setMargins(dp(28), dp(90), dp(28), dp(150))
-        })
+        root.addView(A4GuideView(this), FrameLayout.LayoutParams(-1, -1))
 
         status = TextView(this).apply {
             text = "Расположите документ внутри рамки"
@@ -148,6 +142,20 @@ class DocumentScanActivity : AppCompatActivity() {
             visibility = View.GONE
             setBackgroundColor(Color.BLACK)
             addView(reviewImage, LinearLayout.LayoutParams(-1, 0, 1f))
+            filterStatus = TextView(context).apply {
+                text = "Фильтр: ЦВЕТ"
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                setPadding(0, dp(6), 0, dp(2))
+            }
+            addView(filterStatus, LinearLayout.LayoutParams(-1, -2))
+            addView(LinearLayout(this@DocumentScanActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(8), dp(4), dp(8), dp(4))
+                addFilterButton("ОРИГИНАЛ", DocumentProcessor.Filter.ORIGINAL)
+                addFilterButton("ЦВЕТ", DocumentProcessor.Filter.COLOR)
+                addFilterButton("Ч/Б", DocumentProcessor.Filter.BLACK_WHITE)
+            }, LinearLayout.LayoutParams(-1, dp(54)))
             addView(LinearLayout(this@DocumentScanActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(dp(12), dp(8), dp(12), dp(20))
@@ -172,7 +180,6 @@ class DocumentScanActivity : AppCompatActivity() {
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener({
             val cameraProvider = providerFuture.get()
-            val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
             val target = targetSize(intent.getIntExtra(EXTRA_MEGAPIXELS, 5))
             val selector = ResolutionSelector.Builder()
                 .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
@@ -181,6 +188,13 @@ class DocumentScanActivity : AppCompatActivity() {
                     ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
                 ))
                 .build()
+            val previewSelector = ResolutionSelector.Builder()
+                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                .build()
+            val preview = Preview.Builder()
+                .setResolutionSelector(previewSelector)
+                .build()
+                .also { it.setSurfaceProvider(previewView.surfaceProvider) }
             imageCapture = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .setResolutionSelector(selector)
@@ -210,13 +224,14 @@ class DocumentScanActivity : AppCompatActivity() {
                             val bitmap = loadOriented(rawFile)
                             val detection = DocumentProcessor.detectCorners(bitmap)
                             val automaticResult = if (detection.edgesFound) {
-                                DocumentProcessor.cropAndEnhance(bitmap, detection.corners)
+                                DocumentProcessor.crop(bitmap, detection.corners, DocumentProcessor.Filter.COLOR)
                             } else {
                                 null
                             }
                             rawFile.delete()
                             runOnUiThread {
                                 sourceBitmap = bitmap
+                                currentCorners = detection.corners
                                 cropView.setDocument(bitmap, detection.corners)
                                 progress.visibility = View.GONE
                                 if (automaticResult != null) {
@@ -254,6 +269,7 @@ class DocumentScanActivity : AppCompatActivity() {
         reviewPanel.visibility = View.GONE
         sourceBitmap?.recycle()
         sourceBitmap = null
+        currentCorners = null
         processedBitmap?.recycle()
         processedBitmap = null
         captureButton.isEnabled = true
@@ -261,26 +277,52 @@ class DocumentScanActivity : AppCompatActivity() {
     }
 
     private fun cropDocument() {
-        val source = sourceBitmap ?: return
         editorPanel.visibility = View.GONE
+        currentCorners = cropView.documentCorners()
+        applyFilter(DocumentProcessor.Filter.COLOR)
+    }
+
+    private fun LinearLayout.addFilterButton(label: String, filter: DocumentProcessor.Filter) {
+        addView(Button(context).apply {
+            text = label
+            textSize = 11f
+            setOnClickListener { applyFilter(filter) }
+        }, LinearLayout.LayoutParams(0, -1, 1f).apply {
+            marginStart = dp(3)
+            marginEnd = dp(3)
+        })
+    }
+
+    private fun applyFilter(filter: DocumentProcessor.Filter) {
+        val source = sourceBitmap ?: return
+        val corners = currentCorners ?: return
+        if (processingFilter) return
+        processingFilter = true
         progress.visibility = View.VISIBLE
-        status.text = "Обрезаю и улучшаю документ..."
-        val corners = cropView.documentCorners()
+        status.text = "Применяю фильтр..."
+        filterStatus.text = "Обработка..."
         worker.execute {
             try {
-                val output = DocumentProcessor.cropAndEnhance(source, corners)
+                val output = DocumentProcessor.crop(source, corners, filter)
                 runOnUiThread {
                     processedBitmap?.recycle()
                     processedBitmap = output
                     reviewImage.setImageBitmap(output)
                     reviewPanel.visibility = View.VISIBLE
                     progress.visibility = View.GONE
+                    processingFilter = false
+                    filterStatus.text = "Фильтр: " + when (filter) {
+                        DocumentProcessor.Filter.ORIGINAL -> "ОРИГИНАЛ"
+                        DocumentProcessor.Filter.COLOR -> "ЦВЕТ"
+                        DocumentProcessor.Filter.BLACK_WHITE -> "Ч/Б"
+                    }
                     status.text = "Документ готов к сохранению"
                 }
             } catch (error: Exception) {
                 runOnUiThread {
                     editorPanel.visibility = View.VISIBLE
                     progress.visibility = View.GONE
+                    processingFilter = false
                     Toast.makeText(this, "Проверьте положение углов", Toast.LENGTH_LONG).show()
                 }
             }

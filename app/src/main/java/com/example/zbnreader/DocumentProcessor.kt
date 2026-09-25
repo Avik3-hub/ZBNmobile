@@ -13,6 +13,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 
 object DocumentProcessor {
+    enum class Filter { ORIGINAL, COLOR, BLACK_WHITE }
     data class Detection(val corners: Array<Point>, val edgesFound: Boolean)
 
     fun detectCorners(source: Bitmap): Detection {
@@ -29,32 +30,18 @@ object DocumentProcessor {
         val kernel = Mat()
         Imgproc.dilate(edges, edges, kernel, Point(-1.0, -1.0), 1)
 
-        val contours = mutableListOf<MatOfPoint>()
+        val edgeContours = mutableListOf<MatOfPoint>()
         val hierarchy = Mat()
-        Imgproc.findContours(edges, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
+        Imgproc.findContours(edges, edgeContours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
         val imageArea = detection.cols() * detection.rows().toDouble()
-        val minimumArea = imageArea * 0.12
-        val maximumArea = imageArea * 0.92
-        var corners: Array<Point>? = null
-        for (contour in contours.sortedByDescending { Imgproc.contourArea(it) }.take(30)) {
-            val area = Imgproc.contourArea(contour)
-            if (area < minimumArea) break
-            if (area > maximumArea) continue
-            val curve = MatOfPoint2f(*contour.toArray())
-            val approx = MatOfPoint2f()
-            Imgproc.approxPolyDP(curve, approx, Imgproc.arcLength(curve, true) * 0.02, true)
-            val polygon = MatOfPoint(*approx.toArray())
-            if (approx.total() == 4L && Imgproc.isContourConvex(polygon)) {
-                corners = order(approx.toArray()).map { Point(it.x / scale, it.y / scale) }.toTypedArray()
-                polygon.release()
-                curve.release()
-                approx.release()
-                break
-            }
-            polygon.release()
-            curve.release()
-            approx.release()
-        }
+        val whiteMask = Mat()
+        Imgproc.threshold(gray, whiteMask, 0.0, 255.0, Imgproc.THRESH_BINARY + Imgproc.THRESH_OTSU)
+        val closeKernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(9.0, 9.0))
+        Imgproc.morphologyEx(whiteMask, whiteMask, Imgproc.MORPH_CLOSE, closeKernel)
+        val whiteContours = mutableListOf<MatOfPoint>()
+        Imgproc.findContours(whiteMask, whiteContours, Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
+        val corners = findDocument(whiteContours, imageArea, scale)
+            ?: findDocument(edgeContours, imageArea, scale)
 
         val fallbackX = rgba.cols() * 0.08
         val fallbackY = rgba.rows() * 0.08
@@ -63,13 +50,14 @@ object DocumentProcessor {
             Point(rgba.cols() - fallbackX, rgba.rows() - fallbackY),
             Point(fallbackX, rgba.rows() - fallbackY)
         )
-        contours.forEach { it.release() }
+        edgeContours.forEach { it.release() }
+        whiteContours.forEach { it.release() }
         rgba.release(); detection.release(); gray.release(); edges.release()
-        kernel.release(); hierarchy.release()
+        kernel.release(); hierarchy.release(); whiteMask.release(); closeKernel.release()
         return Detection(result, corners != null)
     }
 
-    fun cropAndEnhance(source: Bitmap, corners: Array<Point>): Bitmap {
+    fun crop(source: Bitmap, corners: Array<Point>, filter: Filter): Bitmap {
         require(corners.size == 4)
         val rgba = Mat()
         Utils.bitmapToMat(source, rgba)
@@ -86,6 +74,28 @@ object DocumentProcessor {
         val transform = Imgproc.getPerspectiveTransform(sourceCorners, targetCorners)
         val warped = Mat()
         Imgproc.warpPerspective(rgba, warped, transform, Size(width.toDouble(), height.toDouble()))
+
+        if (filter == Filter.ORIGINAL) {
+            val output = Bitmap.createBitmap(warped.cols(), warped.rows(), Bitmap.Config.ARGB_8888)
+            Utils.matToBitmap(warped, output)
+            rgba.release(); sourceCorners.release(); targetCorners.release()
+            transform.release(); warped.release()
+            return output
+        }
+
+        if (filter == Filter.BLACK_WHITE) {
+            val gray = Mat()
+            Imgproc.cvtColor(warped, gray, Imgproc.COLOR_RGBA2GRAY)
+            Imgproc.adaptiveThreshold(
+                gray, gray, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                Imgproc.THRESH_BINARY, 31, 12.0
+            )
+            val output = Bitmap.createBitmap(gray.cols(), gray.rows(), Bitmap.Config.ARGB_8888)
+            Utils.matToBitmap(gray, output)
+            rgba.release(); sourceCorners.release(); targetCorners.release()
+            transform.release(); warped.release(); gray.release()
+            return output
+        }
 
         val rgb = Mat()
         val lab = Mat()
@@ -109,6 +119,39 @@ object DocumentProcessor {
         channels.forEach { it.release() }
         clahe.collectGarbage()
         return output
+    }
+
+    private fun findDocument(
+        contours: List<MatOfPoint>,
+        imageArea: Double,
+        scale: Double
+    ): Array<Point>? {
+        var best: Array<Point>? = null
+        var bestScore = 0.0
+        for (contour in contours.sortedByDescending { Imgproc.contourArea(it) }.take(40)) {
+            val area = Imgproc.contourArea(contour)
+            if (area < imageArea * 0.08) break
+            if (area > imageArea * 0.94) continue
+            val curve = MatOfPoint2f(*contour.toArray())
+            val approx = MatOfPoint2f()
+            Imgproc.approxPolyDP(curve, approx, Imgproc.arcLength(curve, true) * 0.035, true)
+            val polygon = MatOfPoint(*approx.toArray())
+            if (approx.total() == 4L && Imgproc.isContourConvex(polygon)) {
+                val ordered = order(approx.toArray())
+                val width = max(distance(ordered[0], ordered[1]), distance(ordered[3], ordered[2]))
+                val height = max(distance(ordered[0], ordered[3]), distance(ordered[1], ordered[2]))
+                val ratio = minOf(width, height) / max(width, height)
+                if (ratio in 0.48..0.88) {
+                    val score = area * (1.0 - kotlin.math.abs(ratio - 0.707) * 0.35)
+                    if (score > bestScore) {
+                        bestScore = score
+                        best = ordered.map { Point(it.x / scale, it.y / scale) }.toTypedArray()
+                    }
+                }
+            }
+            polygon.release(); curve.release(); approx.release()
+        }
+        return best
     }
 
     private fun order(points: Array<Point>): Array<Point> {
