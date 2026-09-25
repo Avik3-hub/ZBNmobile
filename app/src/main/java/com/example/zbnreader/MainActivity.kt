@@ -127,7 +127,7 @@ class MainActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(8))
+            setPadding(dp(12), dp(6), dp(12), dp(4))
             setBackgroundColor(Color.TRANSPARENT)
         }
 
@@ -135,7 +135,7 @@ class MainActivity : AppCompatActivity() {
         val appHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(2), 0, dp(8))
+            setPadding(dp(4), 0, 0, dp(4))
         }
         val titleBlock = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -145,13 +145,13 @@ class MainActivity : AppCompatActivity() {
         }
         titleBlock.addView(TextView(this).apply {
             text = "ZBN mobile"
-            textSize = 24f
+            textSize = 22f
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(COLOR_TEXT)
         })
         titleBlock.addView(TextView(this).apply {
             text = "СНЯТИЕ ПОЛЁТНОЙ ИНФОРМАЦИИ"
-            textSize = 10f
+            textSize = 9.5f
             letterSpacing = 0.08f
             setTextColor(COLOR_AMBER)
         })
@@ -173,12 +173,30 @@ class MainActivity : AppCompatActivity() {
         }
         appHeader.addView(titleBlock)
         appHeader.addView(btnSettings)
-        root.addView(appHeader)
+        val headerFrame = FrameLayout(this).apply {
+            addView(ImageView(this@MainActivity).apply {
+                setImageResource(R.drawable.zbn_blueprint_mi171)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                alpha = 0.55f
+                contentDescription = null
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, FrameLayout.LayoutParams(dp(158), dp(62), Gravity.END or Gravity.TOP).apply {
+                marginEnd = dp(42)
+            })
+            addView(appHeader, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+        }
+        root.addView(headerFrame, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(64)
+        ))
 
         val statusCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(9), dp(12), dp(9))
+            setPadding(dp(12), dp(6), dp(10), dp(6))
             background = createRoundedDrawable(COLOR_SURFACE, 16f, COLOR_BORDER, 1)
         }
         statusCard.addView(TextView(this).apply {
@@ -187,7 +205,7 @@ class MainActivity : AppCompatActivity() {
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(COLOR_ACCENT)
             gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(dp(38), dp(30)))
+        }, LinearLayout.LayoutParams(dp(34), dp(26)))
         tvStatus = TextView(this).apply {
             text = "Подключите ЗБН и нажмите «Начать сканирование»"
             textSize = 12f
@@ -207,11 +225,11 @@ class MainActivity : AppCompatActivity() {
             setTextColor(COLOR_AMBER)
             gravity = Gravity.CENTER
             background = createRoundedDrawable(Color.TRANSPARENT, 14f, COLOR_AMBER, 1)
-        }, LinearLayout.LayoutParams(dp(28), dp(28)))
+        }, LinearLayout.LayoutParams(dp(24), dp(24)))
         root.addView(statusCard, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(10) })
+        ).apply { bottomMargin = dp(7) })
 
         // 2. КНОПКА СТАРТА
         btnStart = Button(this).apply {
@@ -220,14 +238,14 @@ class MainActivity : AppCompatActivity() {
             typeface = resources.getFont(R.font.zbn_sans_bold)
             minHeight = 0
             minimumHeight = 0
-            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setPadding(dp(16), dp(12), dp(16), dp(12))
             setOnClickListener { startReading() }
         }
         setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
         val startParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { setMargins(0, 0, 0, dp(10)) }
+        ).apply { setMargins(0, 0, 0, dp(7)) }
         btnStart.layoutParams = startParams
         root.addView(btnStart)
 
@@ -235,10 +253,13 @@ class MainActivity : AppCompatActivity() {
         val tableCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
+            minimumHeight = dp(290)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-            ).apply { setMargins(0, 0, 0, dp(10)) }
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            ).apply {
+                setMargins(0, 0, 0, dp(7))
+            }
+            setPadding(dp(7), dp(7), dp(7), dp(7))
         }
         tableCard.addView(TextView(this).apply {
             text = "ВКЛЮЧЕНИЯ ЗБН"
@@ -276,9 +297,9 @@ class MainActivity : AppCompatActivity() {
         val actionPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(10))
+            setPadding(0, 0, 0, dp(6))
         }
-        val btnParams = LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+        val btnParams = LinearLayout.LayoutParams(0, dp(46), 1f).apply {
             setMargins(dp(3), 0, dp(3), 0)
         }
         btnCopySelected = Button(this).apply {
@@ -315,9 +336,9 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(82)
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(68)
             )
-            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setPadding(dp(10), dp(6), dp(10), dp(6))
         }
         logCard.addView(TextView(this).apply {
             text = "ЖУРНАЛ СЕАНСА"
@@ -341,6 +362,31 @@ class MainActivity : AppCompatActivity() {
         scrollViewLog.addView(tvLog)
         logCard.addView(scrollViewLog)
         root.addView(logCard)
+
+        val aircraftScene = FrameLayout(this).apply {
+            addView(ImageView(this@MainActivity).apply {
+                setImageResource(R.drawable.zbn_helipad_night)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                alpha = 0.62f
+                contentDescription = null
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+            addView(ImageView(this@MainActivity).apply {
+                setImageResource(R.drawable.zbn_mi171_scene)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = null
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, FrameLayout.LayoutParams(dp(220), dp(88), Gravity.CENTER))
+        }
+        root.addView(aircraftScene, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(92)
+        ).apply {
+            topMargin = dp(1)
+        })
 
         val screen = FrameLayout(this).apply {
             setBackgroundColor(COLOR_BG)

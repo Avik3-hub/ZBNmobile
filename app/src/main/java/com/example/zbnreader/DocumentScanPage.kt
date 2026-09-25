@@ -34,7 +34,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
 
     init {
         orientation = VERTICAL
-        setPadding(dp(16), dp(14), dp(16), dp(12))
+        setPadding(dp(16), dp(10), dp(16), dp(8))
         setBackgroundColor(backgroundColor)
 
         val header = FrameLayout(context)
@@ -42,19 +42,19 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             orientation = VERTICAL
             addView(TextView(context).apply {
                 text = "ДОКУМЕНТЫ ЭКИПАЖА"
-                textSize = 10f
+                textSize = 9.5f
                 letterSpacing = 0.09f
                 setTextColor(amberColor)
             }, fullWidth(bottom = 3))
             addView(TextView(context).apply {
                 text = "Паспорт БУР-1"
-                textSize = 26f
+                textSize = 24f
                 typeface = resources.getFont(R.font.zbn_sans_bold)
                 setTextColor(textColor)
             }, fullWidth(bottom = 3))
             addView(TextView(context).apply {
                 text = "Съёмка, выравнивание и подготовка документа"
-                textSize = 12f
+                textSize = 11f
                 setTextColor(mutedColor)
             }, fullWidth())
         }
@@ -63,36 +63,36 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             FrameLayout.LayoutParams.WRAP_CONTENT
         ))
         header.addView(ImageView(context).apply {
-            setImageResource(R.drawable.zbn_blueprint_mi171)
+            setImageResource(R.drawable.zbn_blueprint_mi171_front)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            alpha = 0.68f
+            alpha = 0.72f
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, FrameLayout.LayoutParams(dp(152), dp(78), Gravity.END or Gravity.TOP).apply {
-            topMargin = dp(1)
+        }, FrameLayout.LayoutParams(dp(126), dp(84), Gravity.END or Gravity.TOP).apply {
+            topMargin = dp(2)
         })
-        addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(102)).apply {
-            bottomMargin = dp(10)
+        addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(88)).apply {
+            bottomMargin = dp(6)
         })
 
         val aircraftCard = LinearLayout(context).apply {
             orientation = VERTICAL
-            setPadding(dp(16), dp(13), dp(16), dp(13))
+            setPadding(dp(14), dp(9), dp(14), dp(9))
             background = rounded(surfaceColor, 18f, borderColor)
         }
         aircraftCard.addView(label("ПОСЛЕДНИЙ БОРТ", amberColor))
         tailValue.apply {
-            textSize = 22f
+            textSize = 19f
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentColor)
-            setPadding(0, dp(5), 0, 0)
+            setPadding(0, dp(3), 0, 0)
         }
         aircraftCard.addView(tailValue, fullWidth())
-        addView(aircraftCard, fullWidth(bottom = 12))
+        addView(aircraftCard, fullWidth(bottom = 8))
 
         val settingsCard = LinearLayout(context).apply {
             orientation = VERTICAL
-            setPadding(dp(14), dp(13), dp(14), dp(14))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
             background = rounded(surfaceColor, 20f, borderColor)
         }
 
@@ -104,10 +104,10 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             setHintTextColor(mutedColor)
             hint = "ФАМИЛИЯ"
             setSingleLine(true)
-            setPadding(dp(14), dp(11), dp(14), dp(11))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
             background = rounded(fieldColor, 14f, borderColor)
         }
-        settingsCard.addView(surnameInput, fullWidth(bottom = 14))
+        settingsCard.addView(surnameInput, fullWidth(bottom = 10))
 
         settingsCard.addView(label("РАЗРЕШЕНИЕ СНИМКА"), fullWidth(bottom = 6))
         val resolutionSpinner = Spinner(context).apply {
@@ -121,8 +121,8 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             setPadding(dp(10), 0, dp(10), 0)
             background = rounded(fieldColor, 14f, borderColor)
         }
-        settingsCard.addView(resolutionSpinner, LayoutParams(LayoutParams.MATCH_PARENT, dp(52)).apply {
-            bottomMargin = dp(14)
+        settingsCard.addView(resolutionSpinner, LayoutParams(LayoutParams.MATCH_PARENT, dp(46)).apply {
+            bottomMargin = dp(10)
         })
 
         settingsCard.addView(label("БУДЕТ СОХРАНЕНО КАК"), fullWidth(bottom = 6))
@@ -130,11 +130,11 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             textSize = 14f
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentColor)
-            setPadding(dp(14), dp(13), dp(14), dp(13))
+            setPadding(dp(12), dp(9), dp(12), dp(9))
             background = rounded(fieldColor, 14f, borderColor)
         }
         settingsCard.addView(fileNamePreview, fullWidth())
-        addView(settingsCard, fullWidth(bottom = 14))
+        addView(settingsCard, fullWidth(bottom = 10))
 
         val scanButton = Button(context).apply {
             text = "СФОТОГРАФИРОВАТЬ ДОКУМЕНТ"
@@ -158,7 +158,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
                 })
             }
         }
-        addView(scanButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(62)))
+        addView(scanButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(54)))
 
         addView(ImageView(context).apply {
             setImageResource(R.drawable.zbn_helipad_night)
