@@ -27,4 +27,21 @@ object DocumentFileName {
         val surnamePart = normalizeSurname(surname).ifEmpty { "ФАМИЛИЯ" }
         return "${datePart}_${tailPart}_${surnamePart}.jpg"
     }
+
+    fun normalizeCustomFileName(value: String, fallback: String): String {
+        val clean = value
+            .trim()
+            .substringAfterLast('/')
+            .substringAfterLast('\\')
+            .replace(Regex("[\\x00-\\x1F<>:\"/\\\\|?*]"), "_")
+            .replace(Regex("_+"), "_")
+            .trim(' ', '.')
+            .take(120)
+        if (clean.isEmpty()) return fallback
+        return if (clean.endsWith(".jpg", ignoreCase = true)) {
+            clean.dropLast(4) + ".jpg"
+        } else {
+            clean.substringBeforeLast('.', clean) + ".jpg"
+        }
+    }
 }

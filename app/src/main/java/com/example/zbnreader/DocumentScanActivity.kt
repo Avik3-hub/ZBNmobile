@@ -334,7 +334,10 @@ class DocumentScanActivity : AppCompatActivity() {
         val bitmap = processedBitmap ?: return
         val tail = DocumentFileName.normalizeTailNumber(intent.getStringExtra(EXTRA_TAIL).orEmpty())
         val surname = intent.getStringExtra(EXTRA_SURNAME).orEmpty()
-        val name = DocumentFileName.create(tail, surname)
+        val fallbackName = DocumentFileName.create(tail, surname)
+        val name = DocumentFileName.normalizeCustomFileName(
+            intent.getStringExtra(EXTRA_FILE_NAME).orEmpty(), fallbackName
+        )
         val folder = File(Environment.getExternalStorageDirectory(), "ZBNreader/Борт_${tail.ifEmpty { "Неизвестный_Борт" }}")
         if (!folder.exists() && !folder.mkdirs()) {
             Toast.makeText(this, "Не удалось создать папку для снимка", Toast.LENGTH_LONG).show()
@@ -389,5 +392,6 @@ class DocumentScanActivity : AppCompatActivity() {
         const val EXTRA_TAIL = "tail"
         const val EXTRA_SURNAME = "surname"
         const val EXTRA_MEGAPIXELS = "megapixels"
+        const val EXTRA_FILE_NAME = "file_name"
     }
 }

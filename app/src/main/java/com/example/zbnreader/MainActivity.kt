@@ -67,6 +67,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var tableLayout: TableLayout
     private lateinit var tableScroll: HorizontalScrollView
+    private lateinit var headerTailValue: TextView
     private lateinit var mi171Pet: Mi171PetView
     private lateinit var petSpeech: PetSpeechView
     private var observedUsbId: Int? = null
@@ -134,19 +135,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 1. ШАПКА И СТАТУС
-        val appHeader = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), 0, 0, dp(4))
-        }
         val titleBlock = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = dp(10)
-            }
+            setPadding(dp(4), dp(2), 0, 0)
         }
         titleBlock.addView(TextView(this).apply {
-            text = "ZBN mobile"
+            text = "ZBN Mobile"
             textSize = 22f
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(COLOR_TEXT)
@@ -157,24 +151,32 @@ class MainActivity : AppCompatActivity() {
             letterSpacing = 0.08f
             setTextColor(COLOR_AMBER)
         })
+        titleBlock.addView(TextView(this).apply {
+            text = "Ми-8 АМТ"
+            textSize = 8.5f
+            setTextColor(COLOR_TEXT_MUTED)
+            setPadding(0, dp(3), 0, 0)
+        })
+        headerTailValue = TextView(this).apply {
+            textSize = 8.5f
+            setTextColor(COLOR_TEXT_MUTED)
+        }
+        titleBlock.addView(headerTailValue)
         val btnSettings = Button(this).apply {
             text = "⋮"
             textSize = 24f
             setTextColor(COLOR_TEXT)
-            background = createRoundedDrawable(COLOR_SURFACE_CONTAINER, 24f, COLOR_BORDER, 1)
+            background = createRoundedDrawable(Color.TRANSPARENT, 0f)
             minHeight = 0
             minimumHeight = 0
             minWidth = 0
             minimumWidth = 0
             gravity = Gravity.CENTER
             contentDescription = "Настройки"
-            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
             }
         }
-        appHeader.addView(titleBlock)
-        appHeader.addView(btnSettings)
         val headerFrame = FrameLayout(this).apply {
             addView(ImageView(this@MainActivity).apply {
                 setImageResource(R.drawable.zbn_blueprint_mi171)
@@ -183,24 +185,26 @@ class MainActivity : AppCompatActivity() {
                 alpha = 0.90f
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, FrameLayout.LayoutParams(dp(190), dp(70), Gravity.END or Gravity.TOP).apply {
-                marginEnd = dp(34)
+            }, FrameLayout.LayoutParams(dp(224), dp(88), Gravity.END or Gravity.CENTER_VERTICAL).apply {
+                marginEnd = dp(8)
             })
-            addView(appHeader, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+            addView(titleBlock, FrameLayout.LayoutParams(
+                dp(210), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.START or Gravity.TOP
             ))
+            addView(btnSettings, FrameLayout.LayoutParams(
+                dp(38), dp(42), Gravity.END or Gravity.TOP
+            ).apply { topMargin = dp(-5) })
         }
         root.addView(headerFrame, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(64)
+            dp(88)
         ))
 
         val statusCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), dp(4), dp(9), dp(4))
-            background = createRoundedDrawable(COLOR_SURFACE, 16f, COLOR_BORDER, 1)
+            background = createRoundedDrawable(COLOR_SURFACE, 8f, COLOR_BORDER, 1)
         }
         statusCard.addView(TextView(this).apply {
             text = "USB"
@@ -227,7 +231,7 @@ class MainActivity : AppCompatActivity() {
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(COLOR_AMBER)
             gravity = Gravity.CENTER
-            background = createRoundedDrawable(Color.TRANSPARENT, 14f, COLOR_AMBER, 1)
+            background = createRoundedDrawable(Color.TRANSPARENT, 8f, COLOR_AMBER, 1)
         }, LinearLayout.LayoutParams(dp(22), dp(22)))
         root.addView(statusCard, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -244,7 +248,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(14), dp(8), dp(14), dp(8))
             setOnClickListener { startReading() }
         }
-        setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 24f)
+        setCustomButtonState(btnStart, true, COLOR_ACCENT, COLOR_ACCENT_TEXT, 7f)
         val startParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             dp(44)
@@ -255,7 +259,7 @@ class MainActivity : AppCompatActivity() {
         // 3. ТАБЛИЦА СПИСКА ВКЛЮЧЕНИЙ
         val tableCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
+            background = createRoundedDrawable(COLOR_SURFACE, 10f, COLOR_BORDER, 1)
             minimumHeight = dp(290)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
@@ -266,10 +270,11 @@ class MainActivity : AppCompatActivity() {
         }
         tableCard.addView(TextView(this).apply {
             text = "ВКЛЮЧЕНИЯ ЗБН"
-            textSize = 10f
+            textSize = 16f
+            typeface = resources.getFont(R.font.zbn_sans_bold)
             letterSpacing = 0.08f
             setTextColor(COLOR_AMBER)
-            setPadding(dp(6), dp(3), dp(6), dp(7))
+            setPadding(dp(6), dp(3), dp(6), dp(8))
         })
         tableScroll = HorizontalScrollView(this).apply {
             isSaveEnabled = false
@@ -309,7 +314,9 @@ class MainActivity : AppCompatActivity() {
         }
         btnCopySelected = Button(this).apply {
             text = "Копировать"
-            textSize = 12f
+            textSize = 10.5f
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_copy, 0, 0, 0)
+            compoundDrawablePadding = dp(5)
             setOnClickListener { copySelectedFlight() }
         }
         btnCopySelected.layoutParams = btnParams
@@ -317,7 +324,9 @@ class MainActivity : AppCompatActivity() {
 
         btnFullDump = Button(this).apply {
             text = "ВЕСЬ ЗБН"
-            textSize = 12f
+            textSize = 10.5f
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_storage, 0, 0, 0)
+            compoundDrawablePadding = dp(5)
             setOnClickListener { executeFullDumpCommand() }
         }
         btnFullDump.layoutParams = btnParams
@@ -325,7 +334,9 @@ class MainActivity : AppCompatActivity() {
 
         btnExportExcel = Button(this).apply {
             text = "В Excel"
-            textSize = 12f
+            textSize = 10.5f
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_table, 0, 0, 0)
+            compoundDrawablePadding = dp(5)
             setOnClickListener { exportToExcel() }
         }
         btnExportExcel.layoutParams = btnParams
@@ -336,13 +347,10 @@ class MainActivity : AppCompatActivity() {
         actionPanel.addView(btnExportExcel)
         root.addView(actionPanel)
 
-        // 6. ОКНО КОНСОЛИ
+        // 6. ЖУРНАЛ И ВЕРТОЛЁТ: изображение намеренно заходит на журнал.
         val logCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(58)
-            )
+            background = createRoundedDrawable(COLOR_SURFACE, 10f, COLOR_BORDER, 1)
             setPadding(dp(10), dp(6), dp(10), dp(6))
         }
         logCard.addView(TextView(this).apply {
@@ -366,15 +374,18 @@ class MainActivity : AppCompatActivity() {
         }
         scrollViewLog.addView(tvLog)
         logCard.addView(scrollViewLog)
-        root.addView(logCard)
 
-        val aircraftScene = FrameLayout(this).apply {
+        val lowerPanel = FrameLayout(this).apply {
             clipChildren = true
+            addView(logCard, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
             addView(ImageView(this@MainActivity).apply {
                 setImageResource(R.drawable.zbn_helipad_night)
                 scaleType = ImageView.ScaleType.FIT_XY
-                alpha = 0.24f
-                translationY = dp(30).toFloat()
+                alpha = 0.13f
+                translationY = dp(48).toFloat()
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, FrameLayout.LayoutParams(
@@ -386,13 +397,14 @@ class MainActivity : AppCompatActivity() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, FrameLayout.LayoutParams(dp(218), dp(82), Gravity.END or Gravity.BOTTOM).apply {
-                marginEnd = dp(12)
+            }, FrameLayout.LayoutParams(dp(250), dp(104), Gravity.END or Gravity.BOTTOM).apply {
+                marginEnd = dp(-2)
+                bottomMargin = dp(-7)
             })
         }
-        root.addView(aircraftScene, LinearLayout.LayoutParams(
+        root.addView(lowerPanel, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(78)
+            dp(126)
         ).apply {
             topMargin = dp(1)
         })
@@ -468,6 +480,7 @@ class MainActivity : AppCompatActivity() {
             })
         })
         renderTableHeader()
+        refreshHeaderTail()
         log("Приложение запущено. Готовность к работе.")
     }
 
@@ -544,11 +557,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun setCustomButtonState(button: Button, enabled: Boolean, activeBg: Int, activeText: Int, radiusDp: Float) {
         button.isEnabled = enabled
+        val cornerRadius = radiusDp.coerceAtMost(8f)
         if (enabled) {
-            button.background = createRoundedDrawable(activeBg, radiusDp)
+            button.background = createRoundedDrawable(activeBg, cornerRadius)
             button.setTextColor(activeText)
         } else {
-            button.background = createRoundedDrawable(COLOR_DISABLED_BG, radiusDp, COLOR_BORDER, 1)
+            button.background = createRoundedDrawable(COLOR_DISABLED_BG, cornerRadius, COLOR_BORDER, 1)
             button.setTextColor(COLOR_TEXT_MUTED)
         }
     }
@@ -567,6 +581,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (::headerTailValue.isInitialized) refreshHeaderTail()
         if (::mi171Pet.isInitialized) {
             val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
             if (!prefs.getBoolean("visual_refresh_pet_default_applied", false)) {
@@ -664,8 +679,7 @@ class MainActivity : AppCompatActivity() {
     private fun renderTableHeader() {
         tableLayout.removeAllViews()
         val headerRow = TableRow(this).apply {
-            setBackgroundColor(COLOR_SURFACE_CONTAINER)
-            setPadding(6, 10, 6, 10)
+            setPadding(0, 0, 0, 0)
         }
         val columns = arrayOf(" № ", " Адрес/Размер ", " Дата ", " Время ", " Начало ", " Конец ", " Рейс ", " Борт ")
         for (col in columns) {
@@ -674,8 +688,9 @@ class MainActivity : AppCompatActivity() {
                 textSize = 12f
                 typeface = resources.getFont(R.font.zbn_sans_bold)
                 setTextColor(COLOR_ACCENT)
-                setPadding(10, 4, 10, 4)
+                setPadding(dp(7), dp(5), dp(7), dp(5))
                 gravity = Gravity.CENTER
+                background = tableCellDrawable(COLOR_SURFACE_CONTAINER)
             }
             headerRow.addView(tv)
         }
@@ -693,7 +708,7 @@ class MainActivity : AppCompatActivity() {
         setCustomButtonState(btnExportExcel, records.isNotEmpty(), COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
         records.forEach { record ->
             val row = TableRow(this).apply {
-                setPadding(6, 8, 6, 8)
+                setPadding(0, 0, 0, 0)
                 setOnClickListener { selectRow(this, record) }
             }
             when {
@@ -716,8 +731,9 @@ class MainActivity : AppCompatActivity() {
                     text = textVal
                     textSize = 12f
                     setTextColor(COLOR_TEXT)
-                    setPadding(10, 4, 10, 4)
+                    setPadding(dp(7), dp(5), dp(7), dp(5))
                     gravity = Gravity.CENTER
+                    background = tableCellDrawable(Color.TRANSPARENT)
                 }
                 row.addView(tv)
             }
@@ -1040,6 +1056,22 @@ class MainActivity : AppCompatActivity() {
             .edit()
             .putString(DocumentFileName.PREF_LAST_TAIL, tail)
             .apply()
+        refreshHeaderTail()
+    }
+
+    private fun refreshHeaderTail() {
+        val tail = DocumentFileName.normalizeTailNumber(
+            getSharedPreferences("AppSettings", MODE_PRIVATE)
+                .getString(DocumentFileName.PREF_LAST_TAIL, "").orEmpty()
+        )
+        headerTailValue.text = if (tail.isEmpty()) "RA—БОРТ НЕ ОПРЕДЕЛЁН" else "RA-$tail"
+    }
+
+    private fun tableCellDrawable(fillColor: Int) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(fillColor)
+        setStroke(dp(1), Color.parseColor("#2B3540"))
+        cornerRadius = 0f
     }
 
     private fun pageTab(label: String, selected: Boolean) = TextView(this).apply {

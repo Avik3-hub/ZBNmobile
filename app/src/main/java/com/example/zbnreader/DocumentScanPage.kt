@@ -30,7 +30,9 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
     private val prefs = context.getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
     private val tailValue = TextView(context)
     private val surnameInput = EditText(context)
-    private val fileNamePreview = TextView(context)
+    private val fileNameInput = EditText(context)
+    private var updatingFileName = false
+    private var fileNameEdited = false
     private val megapixels = intArrayOf(1, 2, 3, 5, 8, 12)
 
     init {
@@ -42,27 +44,29 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         val headerText = LinearLayout(context).apply {
             orientation = VERTICAL
             addView(TextView(context).apply {
-                text = "ДОКУМЕНТЫ ЭКИПАЖА"
-                textSize = 9f
-                letterSpacing = 0.09f
-                setTextColor(amberColor)
-            }, fullWidth(bottom = 2))
-            addView(TextView(context).apply {
-                text = "Паспорт БУР-1"
-                textSize = 22f
+                text = "ZBN Mobile"
+                textSize = 18f
                 typeface = resources.getFont(R.font.zbn_sans_bold)
                 setTextColor(textColor)
-            }, fullWidth(bottom = 2))
+            }, fullWidth(bottom = 1))
             addView(TextView(context).apply {
-                text = "Съёмка, выравнивание и подготовка документа"
-                textSize = 10f
+                text = "ДОКУМЕНТЫ ЭКИПАЖА"
+                textSize = 9.5f
+                letterSpacing = 0.09f
+                setTextColor(amberColor)
+            }, fullWidth(bottom = 4))
+            addView(TextView(context).apply {
+                text = "Паспорт БУР-1"
+                textSize = 25f
+                typeface = resources.getFont(R.font.zbn_sans_bold)
+                setTextColor(textColor)
+            }, fullWidth(bottom = 3))
+            addView(TextView(context).apply {
+                text = "Съёмка и подготовка документа"
+                textSize = 11.5f
                 setTextColor(mutedColor)
             }, fullWidth())
         }
-        header.addView(headerText, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT
-        ))
         header.addView(ImageView(context).apply {
             setImageResource(R.drawable.zbn_blueprint_mi171_front)
             scaleType = ImageView.ScaleType.FIT_CENTER
@@ -70,35 +74,40 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             alpha = 0.92f
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, FrameLayout.LayoutParams(dp(158), dp(88), Gravity.END or Gravity.TOP).apply {
-            topMargin = dp(-3)
-            marginEnd = dp(-2)
+        }, FrameLayout.LayoutParams(dp(198), dp(116), Gravity.END or Gravity.TOP).apply {
+            topMargin = dp(-4)
+            marginEnd = dp(-8)
         })
-        addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(80)).apply {
-            bottomMargin = dp(4)
+        header.addView(headerText, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        ))
+        addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(116)).apply {
+            bottomMargin = dp(7)
         })
 
         val aircraftCard = LinearLayout(context).apply {
             orientation = VERTICAL
-            setPadding(dp(12), dp(6), dp(12), dp(6))
-            background = rounded(surfaceColor, 16f, borderColor)
+            setPadding(dp(14), dp(11), dp(14), dp(11))
+            background = rounded(surfaceColor, 9f)
         }
         aircraftCard.addView(label("ПОСЛЕДНИЙ БОРТ", amberColor))
         tailValue.apply {
-            textSize = 17f
+            textSize = 20f
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentColor)
-            setPadding(0, dp(2), 0, 0)
+            setPadding(0, dp(5), 0, 0)
         }
         aircraftCard.addView(tailValue, fullWidth())
-        addView(aircraftCard, fullWidth(bottom = 5))
+        addView(aircraftCard, fullWidth(bottom = 8))
 
         val settingsCard = LinearLayout(context).apply {
             orientation = VERTICAL
-            setPadding(dp(10), dp(7), dp(10), dp(7))
-            background = rounded(surfaceColor, 17f, borderColor)
+            setPadding(dp(12), dp(10), dp(12), dp(11))
+            background = rounded(surfaceColor, 9f, borderColor)
         }
 
+        settingsCard.addView(label("НАСТРОЙКИ ИМЕНИ ФАЙЛА", amberColor, 12f), fullWidth(bottom = 9))
         settingsCard.addView(label("ФАМИЛИЯ ДЛЯ ИМЕНИ ФАЙЛА"), fullWidth(bottom = 4))
         surnameInput.apply {
             setText(prefs.getString(DocumentFileName.PREF_SURNAME, "НАГИБИН"))
@@ -108,9 +117,11 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             hint = "ФАМИЛИЯ"
             setSingleLine(true)
             setPadding(dp(10), dp(6), dp(10), dp(6))
-            background = rounded(fieldColor, 12f, borderColor)
+            background = rounded(fieldColor, 7f, borderColor)
         }
-        settingsCard.addView(surnameInput, fullWidth(bottom = 7))
+        settingsCard.addView(surnameInput, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)).apply {
+            bottomMargin = dp(10)
+        })
 
         settingsCard.addView(label("РАЗРЕШЕНИЕ СНИМКА"), fullWidth(bottom = 4))
         val resolutionSpinner = Spinner(context).apply {
@@ -122,22 +133,24 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             val saved = prefs.getInt(DocumentFileName.PREF_MEGAPIXELS, 5)
             setSelection(megapixels.indexOf(saved).coerceAtLeast(0))
             setPadding(dp(10), 0, dp(10), 0)
-            background = rounded(fieldColor, 12f, borderColor)
+            background = rounded(fieldColor, 7f, borderColor)
         }
-        settingsCard.addView(resolutionSpinner, LayoutParams(LayoutParams.MATCH_PARENT, dp(40)).apply {
-            bottomMargin = dp(7)
+        settingsCard.addView(resolutionSpinner, LayoutParams(LayoutParams.MATCH_PARENT, dp(46)).apply {
+            bottomMargin = dp(10)
         })
 
         settingsCard.addView(label("БУДЕТ СОХРАНЕНО КАК"), fullWidth(bottom = 4))
-        fileNamePreview.apply {
-            textSize = 12.5f
+        fileNameInput.apply {
+            textSize = 13f
             typeface = resources.getFont(R.font.zbn_sans_bold)
             setTextColor(accentColor)
+            setSingleLine(true)
+            setSelectAllOnFocus(false)
             setPadding(dp(10), dp(7), dp(10), dp(7))
-            background = rounded(fieldColor, 12f, borderColor)
+            background = rounded(fieldColor, 7f, borderColor)
         }
-        settingsCard.addView(fileNamePreview, fullWidth())
-        addView(settingsCard, fullWidth(bottom = 7))
+        settingsCard.addView(fileNameInput, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)))
+        addView(settingsCard, fullWidth(bottom = 8))
 
         val scanButton = Button(context).apply {
             text = "СФОТОГРАФИРОВАТЬ ДОКУМЕНТ"
@@ -146,10 +159,18 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             setTextColor(accentTextColor)
             minHeight = 0
             minimumHeight = 0
-            background = rounded(accentColor, 17f)
+            background = rounded(accentColor, 7f)
             setOnClickListener {
                 val surname = DocumentFileName.normalizeSurname(surnameInput.text.toString())
                 val mp = megapixels[resolutionSpinner.selectedItemPosition]
+                val fallbackName = DocumentFileName.create(currentTail(), surname)
+                val customName = DocumentFileName.normalizeCustomFileName(
+                    fileNameInput.text.toString(), fallbackName
+                )
+                updatingFileName = true
+                fileNameInput.setText(customName)
+                fileNameInput.setSelection(customName.length)
+                updatingFileName = false
                 prefs.edit()
                     .putString(DocumentFileName.PREF_SURNAME, surname)
                     .putInt(DocumentFileName.PREF_MEGAPIXELS, mp)
@@ -158,6 +179,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
                     putExtra(DocumentScanActivity.EXTRA_TAIL, currentTail())
                     putExtra(DocumentScanActivity.EXTRA_SURNAME, surname)
                     putExtra(DocumentScanActivity.EXTRA_MEGAPIXELS, mp)
+                    putExtra(DocumentScanActivity.EXTRA_FILE_NAME, customName)
                 })
             }
         }
@@ -177,6 +199,13 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = updatePreview()
             override fun afterTextChanged(s: Editable?) = Unit
         })
+        fileNameInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                if (!updatingFileName) fileNameEdited = true
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
         refresh()
     }
 
@@ -191,12 +220,17 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
     )
 
     private fun updatePreview() {
-        fileNamePreview.text = DocumentFileName.create(currentTail(), surnameInput.text.toString())
+        if (fileNameEdited) return
+        val value = DocumentFileName.create(currentTail(), surnameInput.text.toString())
+        updatingFileName = true
+        fileNameInput.setText(value)
+        fileNameInput.setSelection(value.length)
+        updatingFileName = false
     }
 
-    private fun label(text: String, color: Int = mutedColor) = TextView(context).apply {
+    private fun label(text: String, color: Int = mutedColor, size: Float = 9f) = TextView(context).apply {
         this.text = text
-        textSize = 9f
+        textSize = size
         letterSpacing = 0.07f
         setTextColor(color)
     }
