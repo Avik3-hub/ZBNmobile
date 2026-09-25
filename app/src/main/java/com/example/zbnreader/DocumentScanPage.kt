@@ -2,7 +2,6 @@ package com.example.zbnreader
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
@@ -18,15 +17,16 @@ import android.widget.Spinner
 import android.widget.TextView
 
 class DocumentScanPage(context: Context) : LinearLayout(context) {
-    private val backgroundColor = Color.parseColor("#080A0D")
-    private val surfaceColor = Color.parseColor("#14181D")
-    private val fieldColor = Color.parseColor("#20262D")
-    private val borderColor = Color.parseColor("#343C45")
-    private val accentColor = Color.parseColor("#A8C7FA")
-    private val accentTextColor = Color.parseColor("#071526")
-    private val amberColor = Color.parseColor("#F1B45B")
-    private val textColor = Color.parseColor("#F2F5F7")
-    private val mutedColor = Color.parseColor("#89929C")
+    private val palette = ZbnTheme.palette(context)
+    private val backgroundColor = palette.background
+    private val surfaceColor = palette.surface
+    private val fieldColor = palette.surfaceContainer
+    private val borderColor = palette.border
+    private val accentColor = palette.accent
+    private val accentTextColor = palette.accentText
+    private val amberColor = palette.amber
+    private val textColor = palette.text
+    private val mutedColor = palette.muted
     private val prefs = context.getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
     private val tailValue = TextView(context)
     private val surnameInput = EditText(context)
@@ -70,7 +70,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         header.addView(ImageView(context).apply {
             setImageResource(R.drawable.zbn_blueprint_mi171_front)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setColorFilter(Color.parseColor("#4F8BC4"), PorterDuff.Mode.SRC_ATOP)
+            setColorFilter(palette.blueprint, PorterDuff.Mode.SRC_ATOP)
             alpha = 0.92f
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -188,6 +188,8 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         addView(ImageView(context).apply {
             setImageResource(R.drawable.zbn_helipad_night)
             scaleType = ImageView.ScaleType.FIT_END
+            alpha = if (palette.isLight) 0.40f else 1f
+            if (palette.isLight) setColorFilter(palette.background, PorterDuff.Mode.SCREEN)
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {

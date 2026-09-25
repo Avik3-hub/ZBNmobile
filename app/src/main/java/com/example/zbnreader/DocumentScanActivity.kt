@@ -39,15 +39,15 @@ import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
 class DocumentScanActivity : AppCompatActivity() {
-    private val uiBackground = Color.parseColor("#080A0D")
-    private val uiSurface = Color.parseColor("#14181D")
-    private val uiSurfaceRaised = Color.parseColor("#20262D")
-    private val uiBorder = Color.parseColor("#343C45")
-    private val uiAccent = Color.parseColor("#A8C7FA")
-    private val uiAccentText = Color.parseColor("#071526")
-    private val uiAmber = Color.parseColor("#F1B45B")
-    private val uiText = Color.parseColor("#F2F5F7")
-    private val uiMuted = Color.parseColor("#89929C")
+    private lateinit var palette: ZbnPalette
+    private val uiBackground get() = palette.background
+    private val uiSurface get() = palette.surface
+    private val uiSurfaceRaised get() = palette.surfaceContainer
+    private val uiBorder get() = palette.border
+    private val uiAccent get() = palette.accent
+    private val uiAccentText get() = palette.accentText
+    private val uiAmber get() = palette.amber
+    private val uiText get() = palette.text
     private lateinit var previewView: PreviewView
     private lateinit var captureButton: Button
     private lateinit var editorPanel: LinearLayout
@@ -73,6 +73,8 @@ class DocumentScanActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        palette = ZbnTheme.palette(this)
+        ZbnTheme.applySystemBars(this, palette)
         if (!OpenCVLoader.initLocal()) {
             Toast.makeText(this, "Не удалось запустить обработку документов", Toast.LENGTH_LONG).show()
             finish()
@@ -117,7 +119,9 @@ class DocumentScanActivity : AppCompatActivity() {
         root.addView(controlsBackdrop(captureControls), FrameLayout.LayoutParams(-1, dp(196), Gravity.BOTTOM))
 
         // Draw after the lower dock so its bottom edge cannot hide the A4 outline.
-        root.addView(A4GuideView(this), FrameLayout.LayoutParams(-1, -1))
+        root.addView(A4GuideView(this).apply {
+            translationY = -dp(28).toFloat()
+        }, FrameLayout.LayoutParams(-1, -1))
 
         progress = ProgressBar(this).apply { visibility = View.GONE }
         root.addView(progress, FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER))
@@ -165,7 +169,11 @@ class DocumentScanActivity : AppCompatActivity() {
             addView(helipadImage(alphaValue = 0.72f, zoom = 2.45f),
                 FrameLayout.LayoutParams(-1, dp(300), Gravity.BOTTOM))
             addView(View(this@DocumentScanActivity).apply {
-                setBackgroundColor(Color.argb(45, 8, 10, 13))
+                setBackgroundColor(if (palette.isLight) {
+                    Color.argb(150, 238, 242, 246)
+                } else {
+                    Color.argb(45, 8, 10, 13)
+                })
             }, FrameLayout.LayoutParams(-1, dp(300), Gravity.BOTTOM))
             addView(reviewImage, FrameLayout.LayoutParams(-1, -1).apply {
                 bottomMargin = dp(200)
@@ -337,7 +345,11 @@ class DocumentScanActivity : AppCompatActivity() {
         setBackgroundColor(uiBackground)
         addView(helipadImage(alphaValue = 0.34f, zoom = 2.15f), FrameLayout.LayoutParams(-1, -1))
         addView(View(this@DocumentScanActivity).apply {
-            setBackgroundColor(Color.argb(92, 8, 10, 13))
+            setBackgroundColor(if (palette.isLight) {
+                Color.argb(170, 238, 242, 246)
+            } else {
+                Color.argb(92, 8, 10, 13)
+            })
         }, FrameLayout.LayoutParams(-1, -1))
         addView(content, FrameLayout.LayoutParams(-1, -1))
     }
@@ -346,7 +358,10 @@ class DocumentScanActivity : AppCompatActivity() {
     private fun helipadImage(alphaValue: Float, zoom: Float) = ImageView(this).apply {
         setImageResource(R.drawable.zbn_helipad_night)
         scaleType = ImageView.ScaleType.CENTER_CROP
-        alpha = alphaValue
+        alpha = if (palette.isLight) alphaValue * 0.58f else alphaValue
+        if (palette.isLight) {
+            setColorFilter(palette.background, android.graphics.PorterDuff.Mode.SCREEN)
+        }
         contentDescription = null
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         post {

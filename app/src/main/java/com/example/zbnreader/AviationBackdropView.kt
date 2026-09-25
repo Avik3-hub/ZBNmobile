@@ -2,14 +2,14 @@ package com.example.zbnreader
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.view.View
 
 /** Quiet blueprint-style decoration. It never handles input and has no app logic. */
 class AviationBackdropView(context: Context) : View(context) {
+    private val palette = ZbnTheme.palette(context)
     private val blue = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#101A24")
+        color = palette.grid
         style = Paint.Style.STROKE
         strokeWidth = dp(1f)
     }

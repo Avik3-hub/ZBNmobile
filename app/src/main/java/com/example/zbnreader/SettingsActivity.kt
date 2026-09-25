@@ -2,7 +2,6 @@ package com.example.zbnreader
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
@@ -19,17 +18,18 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class SettingsActivity : AppCompatActivity() {
-
-    // Цветовая палитра в стиле Google Gemini (Dark Theme)
-    private val COLOR_BG = Color.parseColor("#131314")
-    private val COLOR_SURFACE = Color.parseColor("#1E1F20")
-    private val COLOR_ACCENT = Color.parseColor("#A8C7FA")
-    private val COLOR_ACCENT_TEXT = Color.parseColor("#041E49")
-    private val COLOR_TEXT = Color.parseColor("#E3E3E3")
-    private val COLOR_BORDER = Color.parseColor("#444746")
+    private lateinit var palette: ZbnPalette
+    private val COLOR_BG get() = palette.background
+    private val COLOR_SURFACE get() = palette.surface
+    private val COLOR_ACCENT get() = palette.accent
+    private val COLOR_ACCENT_TEXT get() = palette.accentText
+    private val COLOR_TEXT get() = palette.text
+    private val COLOR_BORDER get() = palette.border
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        palette = ZbnTheme.palette(this)
+        ZbnTheme.applySystemBars(this, palette)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -96,6 +96,14 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(0, 20, 0, 12)
         }
 
+        val switchLightTheme = SwitchCompat(this).apply {
+            text = "Светлая тема оформления"
+            textSize = 14f
+            setTextColor(COLOR_TEXT)
+            isChecked = prefs.getBoolean(ZbnTheme.PREF_LIGHT_THEME, false)
+            setPadding(0, 20, 0, 12)
+        }
+
         val petSize = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
         val normalSize = RadioButton(this).apply {
             id = View.generateViewId()
@@ -134,6 +142,7 @@ class SettingsActivity : AppCompatActivity() {
                     putInt("baud_rate", selectedBaud)
                     putBoolean("mi171_pet_enabled", switchPet.isChecked)
                     putBoolean("mi171_pet_small", petSize.checkedRadioButtonId == smallSize.id)
+                    putBoolean(ZbnTheme.PREF_LIGHT_THEME, switchLightTheme.isChecked)
                     apply()
                 }
 
@@ -165,6 +174,8 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(spinnerRegSpeed)
         root.addView(createLabel("Скорость обмена RS-422 (Бод):"))
         root.addView(spinnerBaudRate)
+        root.addView(createLabel("Оформление:"))
+        root.addView(switchLightTheme)
         root.addView(switchPet)
         root.addView(createLabel("Размер помощника:"))
         root.addView(petSize)
@@ -181,7 +192,10 @@ class SettingsActivity : AppCompatActivity() {
         ).apply { setMargins(0, 20, 0, 0) }
         root.addView(btnSaveLog, saveLogParams)
 
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(ScrollView(this).apply {
+            setBackgroundColor(COLOR_BG)
+            addView(root)
+        })
     }
 
     private fun saveLogFile() {

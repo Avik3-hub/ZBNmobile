@@ -42,21 +42,19 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
-    // Тёмная авиационная палитра: AMOLED, графит, холодный голубой и янтарный акцент.
-    private val COLOR_BG = Color.parseColor("#080A0D")
-    private val COLOR_SURFACE = Color.parseColor("#14181D")
-    private val COLOR_SURFACE_CONTAINER = Color.parseColor("#20262D")
-    private val COLOR_ACCENT = Color.parseColor("#A8C7FA")
-    private val COLOR_ACCENT_TEXT = Color.parseColor("#071526")
-    private val COLOR_AMBER = Color.parseColor("#F1B45B")
-    private val COLOR_TEXT = Color.parseColor("#F2F5F7")
-    private val COLOR_TEXT_MUTED = Color.parseColor("#89929C")
-    private val COLOR_BORDER = Color.parseColor("#343C45")
-    private val COLOR_DISABLED_BG = Color.parseColor("#101317")
-
-    // Статусные цвета для строк таблицы
-    private val COLOR_DOWNLOADED = Color.parseColor("#1A3852")
-    private val COLOR_ERROR = Color.parseColor("#4A2828")
+    private lateinit var palette: ZbnPalette
+    private val COLOR_BG get() = palette.background
+    private val COLOR_SURFACE get() = palette.surface
+    private val COLOR_SURFACE_CONTAINER get() = palette.surfaceContainer
+    private val COLOR_ACCENT get() = palette.accent
+    private val COLOR_ACCENT_TEXT get() = palette.accentText
+    private val COLOR_AMBER get() = palette.amber
+    private val COLOR_TEXT get() = palette.text
+    private val COLOR_TEXT_MUTED get() = palette.muted
+    private val COLOR_BORDER get() = palette.border
+    private val COLOR_DISABLED_BG get() = palette.disabledBackground
+    private val COLOR_DOWNLOADED get() = palette.downloaded
+    private val COLOR_ERROR get() = palette.error
 
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
@@ -118,6 +116,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        palette = ZbnTheme.palette(this)
+        ZbnTheme.applySystemBars(this, palette)
 
         // Глобальный перехватчик критических сбоев приложения
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
@@ -164,6 +164,7 @@ class MainActivity : AppCompatActivity() {
         titleBlock.addView(headerTailValue)
         val btnSettings = ImageButton(this).apply {
             setImageResource(R.drawable.ic_more_vertical)
+            setColorFilter(COLOR_AMBER, PorterDuff.Mode.SRC_IN)
             background = createRoundedDrawable(Color.TRANSPARENT, 0f)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(9), dp(6), dp(9), dp(6))
@@ -176,7 +177,7 @@ class MainActivity : AppCompatActivity() {
             addView(ImageView(this@MainActivity).apply {
                 setImageResource(R.drawable.zbn_blueprint_mi171)
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setColorFilter(Color.parseColor("#4F8BC4"), PorterDuff.Mode.SRC_ATOP)
+                setColorFilter(palette.blueprint, PorterDuff.Mode.SRC_ATOP)
                 alpha = 0.90f
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -382,7 +383,8 @@ class MainActivity : AppCompatActivity() {
             addView(ImageView(this@MainActivity).apply {
                 setImageResource(R.drawable.zbn_perspective_grid)
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                alpha = 0.82f
+                alpha = if (palette.isLight) 0.56f else 0.82f
+                if (palette.isLight) setColorFilter(palette.background, PorterDuff.Mode.SCREEN)
                 contentDescription = null
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, FrameLayout.LayoutParams(
@@ -583,6 +585,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (::palette.isInitialized && ZbnTheme.isLight(this) != palette.isLight) {
+            recreate()
+            return
+        }
         if (::headerTailValue.isInitialized) refreshHeaderTail()
         if (::mi171Pet.isInitialized) {
             val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
@@ -1072,7 +1078,7 @@ class MainActivity : AppCompatActivity() {
     private fun tableCellDrawable(fillColor: Int) = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
         setColor(fillColor)
-        setStroke(dp(1), Color.parseColor("#2B3540"))
+        setStroke(dp(1), COLOR_BORDER)
         cornerRadius = 0f
     }
 
