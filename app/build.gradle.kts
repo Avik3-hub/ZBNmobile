@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = System.getenv("ZBN_VERSION_CODE")?.toIntOrNull() ?: 2
-        versionName = "1.2"
+        versionName = "1.2.1"
     }
 
     compileOptions {

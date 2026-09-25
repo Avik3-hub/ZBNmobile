@@ -12,9 +12,9 @@ import kotlin.math.hypot
 import kotlin.math.max
 
 object DocumentProcessor {
-    data class Result(val bitmap: Bitmap, val edgesFound: Boolean)
+    data class Detection(val corners: Array<Point>, val edgesFound: Boolean)
 
-    fun scan(source: Bitmap): Result {
+    fun detectCorners(source: Bitmap): Detection {
         val rgba = Mat()
         Utils.bitmapToMat(source, rgba)
         val scale = (1600.0 / max(rgba.cols(), rgba.rows())).coerceAtMost(1.0)
@@ -31,10 +31,14 @@ object DocumentProcessor {
         val contours = mutableListOf<MatOfPoint>()
         val hierarchy = Mat()
         Imgproc.findContours(edges, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
-        val minimumArea = detection.cols() * detection.rows() * 0.18
+        val imageArea = detection.cols() * detection.rows().toDouble()
+        val minimumArea = imageArea * 0.12
+        val maximumArea = imageArea * 0.92
         var corners: Array<Point>? = null
-        for (contour in contours.sortedByDescending { Imgproc.contourArea(it) }.take(12)) {
-            if (Imgproc.contourArea(contour) < minimumArea) break
+        for (contour in contours.sortedByDescending { Imgproc.contourArea(it) }.take(30)) {
+            val area = Imgproc.contourArea(contour)
+            if (area < minimumArea) break
+            if (area > maximumArea) continue
             val curve = MatOfPoint2f(*contour.toArray())
             val approx = MatOfPoint2f()
             Imgproc.approxPolyDP(curve, approx, Imgproc.arcLength(curve, true) * 0.02, true)
@@ -51,13 +55,28 @@ object DocumentProcessor {
             approx.release()
         }
 
-        val found = corners != null
-        val ordered = corners ?: arrayOf(
-            Point(0.0, 0.0), Point(rgba.cols() - 1.0, 0.0),
-            Point(rgba.cols() - 1.0, rgba.rows() - 1.0), Point(0.0, rgba.rows() - 1.0)
+        val fallbackX = rgba.cols() * 0.08
+        val fallbackY = rgba.rows() * 0.08
+        val result = corners ?: arrayOf(
+            Point(fallbackX, fallbackY), Point(rgba.cols() - fallbackX, fallbackY),
+            Point(rgba.cols() - fallbackX, rgba.rows() - fallbackY),
+            Point(fallbackX, rgba.rows() - fallbackY)
         )
-        val width = max(distance(ordered[0], ordered[1]), distance(ordered[3], ordered[2])).toInt().coerceAtLeast(1)
-        val height = max(distance(ordered[0], ordered[3]), distance(ordered[1], ordered[2])).toInt().coerceAtLeast(1)
+        contours.forEach { it.release() }
+        rgba.release(); detection.release(); gray.release(); edges.release()
+        kernel.release(); hierarchy.release()
+        return Detection(result, corners != null)
+    }
+
+    fun cropAndEnhance(source: Bitmap, corners: Array<Point>): Bitmap {
+        require(corners.size == 4)
+        val rgba = Mat()
+        Utils.bitmapToMat(source, rgba)
+        val ordered = corners
+        val width = max(distance(ordered[0], ordered[1]), distance(ordered[3], ordered[2]))
+            .toInt().coerceAtLeast(200)
+        val height = max(distance(ordered[0], ordered[3]), distance(ordered[1], ordered[2]))
+            .toInt().coerceAtLeast(200)
         val sourceCorners = MatOfPoint2f(*ordered)
         val targetCorners = MatOfPoint2f(
             Point(0.0, 0.0), Point(width - 1.0, 0.0),
@@ -76,11 +95,9 @@ object DocumentProcessor {
         val output = Bitmap.createBitmap(scanned.cols(), scanned.rows(), Bitmap.Config.ARGB_8888)
         Utils.matToBitmap(scanned, output)
 
-        contours.forEach { it.release() }
-        rgba.release(); detection.release(); gray.release(); edges.release()
-        kernel.release(); hierarchy.release(); sourceCorners.release(); targetCorners.release()
+        rgba.release(); sourceCorners.release(); targetCorners.release()
         transform.release(); warped.release(); scanned.release()
-        return Result(output, found)
+        return output
     }
 
     private fun order(points: Array<Point>): Array<Point> {

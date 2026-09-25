@@ -39,11 +39,14 @@ import java.util.concurrent.Executors
 class DocumentScanActivity : AppCompatActivity() {
     private lateinit var previewView: PreviewView
     private lateinit var captureButton: Button
+    private lateinit var editorPanel: LinearLayout
+    private lateinit var cropView: DocumentCropView
     private lateinit var reviewPanel: LinearLayout
     private lateinit var reviewImage: ImageView
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
     private var imageCapture: ImageCapture? = null
+    private var sourceBitmap: Bitmap? = null
     private var processedBitmap: Bitmap? = null
     private val worker = Executors.newSingleThreadExecutor()
 
@@ -108,6 +111,34 @@ class DocumentScanActivity : AppCompatActivity() {
         progress = ProgressBar(this).apply { visibility = View.GONE }
         root.addView(progress, FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER))
 
+        cropView = DocumentCropView(this)
+        editorPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setBackgroundColor(Color.BLACK)
+            addView(TextView(context).apply {
+                text = "Передвиньте 4 точки точно на углы документа"
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+            }, LinearLayout.LayoutParams(-1, -2))
+            addView(cropView, LinearLayout.LayoutParams(-1, 0, 1f))
+            addView(LinearLayout(this@DocumentScanActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(12), dp(8), dp(12), dp(20))
+                addView(Button(context).apply {
+                    text = "ПЕРЕСНЯТЬ"
+                    setOnClickListener { showCamera() }
+                }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginEnd = dp(6) })
+                addView(Button(context).apply {
+                    text = "ОБРЕЗАТЬ"
+                    setOnClickListener { cropDocument() }
+                }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginStart = dp(6) })
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        root.addView(editorPanel, FrameLayout.LayoutParams(-1, -1))
+
         reviewImage = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
             setBackgroundColor(Color.BLACK)
@@ -121,8 +152,11 @@ class DocumentScanActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(dp(12), dp(8), dp(12), dp(20))
                 addView(Button(context).apply {
-                    text = "ПЕРЕСНЯТЬ"
-                    setOnClickListener { showCamera() }
+                    text = "ИЗМЕНИТЬ УГЛЫ"
+                    setOnClickListener {
+                        reviewPanel.visibility = View.GONE
+                        editorPanel.visibility = View.VISIBLE
+                    }
                 }, LinearLayout.LayoutParams(0, dp(60), 1f).apply { marginEnd = dp(6) })
                 addView(Button(context).apply {
                     text = "СОХРАНИТЬ JPEG"
@@ -169,20 +203,23 @@ class DocumentScanActivity : AppCompatActivity() {
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(result: ImageCapture.OutputFileResults) {
-                    status.text = "Определяю края и выравниваю документ..."
+                    status.text = "Определяю углы документа..."
                     progress.visibility = View.VISIBLE
                     worker.execute {
                         try {
                             val bitmap = loadOriented(rawFile)
-                            val scan = DocumentProcessor.scan(bitmap)
-                            bitmap.recycle()
+                            val detection = DocumentProcessor.detectCorners(bitmap)
                             rawFile.delete()
                             runOnUiThread {
-                                processedBitmap = scan.bitmap
-                                reviewImage.setImageBitmap(scan.bitmap)
-                                reviewPanel.visibility = View.VISIBLE
+                                sourceBitmap = bitmap
+                                cropView.setDocument(bitmap, detection.corners)
+                                editorPanel.visibility = View.VISIBLE
                                 progress.visibility = View.GONE
-                                status.text = if (scan.edgesFound) "Края документа определены" else "Края не найдены, обработан весь кадр"
+                                status.text = if (detection.edgesFound) {
+                                    "Проверьте найденные углы"
+                                } else {
+                                    "Углы не найдены автоматически"
+                                }
                             }
                         } catch (error: Exception) {
                             runOnUiThread {
@@ -205,11 +242,41 @@ class DocumentScanActivity : AppCompatActivity() {
     }
 
     private fun showCamera() {
+        editorPanel.visibility = View.GONE
         reviewPanel.visibility = View.GONE
+        sourceBitmap?.recycle()
+        sourceBitmap = null
         processedBitmap?.recycle()
         processedBitmap = null
         captureButton.isEnabled = true
         status.text = "Расположите документ внутри рамки"
+    }
+
+    private fun cropDocument() {
+        val source = sourceBitmap ?: return
+        editorPanel.visibility = View.GONE
+        progress.visibility = View.VISIBLE
+        status.text = "Обрезаю и улучшаю документ..."
+        val corners = cropView.documentCorners()
+        worker.execute {
+            try {
+                val output = DocumentProcessor.cropAndEnhance(source, corners)
+                runOnUiThread {
+                    processedBitmap?.recycle()
+                    processedBitmap = output
+                    reviewImage.setImageBitmap(output)
+                    reviewPanel.visibility = View.VISIBLE
+                    progress.visibility = View.GONE
+                    status.text = "Документ готов к сохранению"
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    editorPanel.visibility = View.VISIBLE
+                    progress.visibility = View.GONE
+                    Toast.makeText(this, "Проверьте положение углов", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun savePhoto() {
@@ -256,6 +323,7 @@ class DocumentScanActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         worker.shutdown()
+        sourceBitmap?.recycle()
         processedBitmap?.recycle()
         super.onDestroy()
     }
