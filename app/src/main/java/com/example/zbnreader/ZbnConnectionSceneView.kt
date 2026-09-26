@@ -26,28 +26,27 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
     private val laptop = BitmapFactory.decodeResource(resources, R.drawable.zbn_laptop_scene)
     private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val cablePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(52, 68, 82)
+        color = Color.rgb(18, 27, 36)
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
-        strokeWidth = dp(3.2f)
+        strokeWidth = dp(3.6f)
     }
     private val cableHighlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(126, 151, 171)
+        color = Color.rgb(150, 178, 199)
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
-        strokeWidth = dp(0.9f)
-        alpha = 150
+        strokeWidth = dp(1.15f)
+        alpha = 215
     }
     private val pulseGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeWidth = dp(7f)
-        alpha = 72
+        style = Paint.Style.FILL
     }
     private val pulsePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeWidth = dp(2.2f)
+        style = Paint.Style.FILL
+    }
+    private val pulseCorePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.FILL
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(164, 201, 255)
@@ -63,7 +62,6 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
     }
 
     private val cablePath = Path()
-    private val pulsePath = Path()
     private val pathMeasure = PathMeasure()
     private var pulseAnimator: ValueAnimator? = null
     private var pulsePhase = 0f
@@ -232,12 +230,12 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
         super.onDraw(canvas)
         if (visibility != VISIBLE || width == 0 || height == 0) return
 
-        val laptopWidth = min(dp(184f), width * 0.53f)
+        val laptopWidth = min(dp(100f), width * 0.29f)
         val laptopHeight = laptopWidth * laptop.height / laptop.width.toFloat()
         val laptopRect = RectF(
-            dp(2f),
+            0f,
             height - laptopHeight + dp(2f),
-            dp(2f) + laptopWidth,
+            laptopWidth,
             height + dp(2f)
         )
 
@@ -250,15 +248,15 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
     }
 
     private fun buildCablePath(laptopRect: RectF) {
-        val startX = laptopRect.right - dp(3f)
+        val startX = laptopRect.right - dp(1f)
         val startY = laptopRect.bottom - laptopRect.height() * 0.12f
-        val endX = width * 0.70f
+        val endX = width * 0.69f
         val endY = height * 0.69f
         cablePath.reset()
         cablePath.moveTo(startX, startY)
         cablePath.cubicTo(
-            startX + dp(22f), startY + dp(4f),
-            endX - dp(24f), endY + dp(12f),
+            startX + dp(34f), startY + dp(5f),
+            endX - dp(34f), endY + dp(14f),
             endX, endY
         )
     }
@@ -271,18 +269,38 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
             Signal.ERROR -> Color.rgb(255, 76, 84)
             Signal.NONE -> return
         }
-        pulsePaint.color = color
-        pulseGlowPaint.color = color
-
         pathMeasure.setPath(cablePath, false)
         val length = pathMeasure.length
         val forward = currentSignal == Signal.REQUEST
         val center = if (forward) pulsePhase * length else (1f - pulsePhase) * length
-        val half = min(dp(15f), length * 0.22f)
-        pulsePath.reset()
-        pathMeasure.getSegment((center - half).coerceAtLeast(0f), (center + half).coerceAtMost(length), pulsePath, true)
-        canvas.drawPath(pulsePath, pulseGlowPaint)
-        canvas.drawPath(pulsePath, pulsePaint)
+        val travelDirection = if (forward) 1f else -1f
+        val position = FloatArray(2)
+        val tangent = FloatArray(2)
+
+        repeat(5) { index ->
+            val distance = center - travelDirection * dp(8f) * index
+            if (distance !in 0f..length || !pathMeasure.getPosTan(distance, position, tangent)) return@repeat
+            val normalX = -tangent[1]
+            val normalY = tangent[0]
+            val shimmer = if (index == 0) 0f else kotlin.math.sin(pulsePhase * 18f + index) * dp(1.2f)
+            val x = position[0] + normalX * shimmer
+            val y = position[1] + normalY * shimmer
+            val radius = dp(2.4f - index * 0.3f)
+            val alpha = (255 - index * 38).coerceAtLeast(80)
+
+            pulseGlowPaint.color = color
+            pulseGlowPaint.alpha = (alpha * 0.28f).toInt()
+            canvas.drawCircle(x, y, radius * 2.8f, pulseGlowPaint)
+
+            pulsePaint.color = color
+            pulsePaint.alpha = alpha
+            canvas.drawCircle(x, y, radius, pulsePaint)
+
+            if (index == 0) {
+                pulseCorePaint.alpha = 235
+                canvas.drawCircle(x, y, dp(0.9f), pulseCorePaint)
+            }
+        }
     }
 
     private fun drawLaptopScreen(canvas: Canvas, laptopRect: RectF) {
@@ -301,11 +319,11 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
         progressPaint.color = if (currentSignal == Signal.ERROR) Color.rgb(255, 90, 95) else color
 
         val lines = wrapText(message, screen.width() - dp(10f))
-        val lineHeight = dp(10.5f)
+        val lineHeight = dp(9f)
         val textBlockHeight = lines.size * lineHeight
         var baseline = screen.centerY() - textBlockHeight / 2f + lineHeight * 0.8f
         if (downloadProgress != null) baseline -= dp(4f)
-        lines.take(3).forEach { line ->
+        lines.take(if (downloadProgress == null) 3 else 2).forEach { line ->
             canvas.drawText(line, screen.centerX(), baseline, textPaint)
             baseline += lineHeight
         }

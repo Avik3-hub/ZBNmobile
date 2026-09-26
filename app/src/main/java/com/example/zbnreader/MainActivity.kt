@@ -19,6 +19,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
@@ -66,6 +67,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tableLayout: TableLayout
     private lateinit var tableScroll: HorizontalScrollView
     private lateinit var headerTailValue: TextView
+    private lateinit var mainPager: ViewPager2
     private lateinit var connectionScene: ZbnConnectionSceneView
     private var observedUsbId: Int? = null
     private var usbReceiverRegistered = false
@@ -447,7 +449,7 @@ class MainActivity : AppCompatActivity() {
         }, ContextCompat.RECEIVER_EXPORTED)
         usbReceiverRegistered = true
         val scanPage = DocumentScanPage(this)
-        val pager = ViewPager2(this).apply {
+        mainPager = ViewPager2(this).apply {
             adapter = StaticPagesAdapter(listOf(screen, scanPage))
             offscreenPageLimit = 1
         }
@@ -462,9 +464,9 @@ class MainActivity : AppCompatActivity() {
             addView(firstTab)
             addView(secondTab)
         }
-        firstTab.setOnClickListener { pager.setCurrentItem(0, true) }
-        secondTab.setOnClickListener { pager.setCurrentItem(1, true) }
-        pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+        firstTab.setOnClickListener { mainPager.setCurrentItem(0, true) }
+        secondTab.setOnClickListener { mainPager.setCurrentItem(1, true) }
+        mainPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 stylePageTab(firstTab, position == 0)
                 stylePageTab(secondTab, position == 1)
@@ -474,7 +476,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(COLOR_BG)
-            addView(pager, LinearLayout.LayoutParams(
+            addView(mainPager, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
             ))
             addView(pageIndicator, LinearLayout.LayoutParams(
@@ -1457,11 +1459,25 @@ class MainActivity : AppCompatActivity() {
                 workbook.close()
                 log("Таблица экспортирована в Excel: ${outputFile.absolutePath}")
                 updateStatus("Статус: Excel сохранен ($fileName)")
+                runOnUiThread { showBurPassportReminder() }
             } catch (e: Exception) {
                 log("Ошибка создания файла Excel", e)
                 updateStatus("Статус: Ошибка создания Excel")
             }
         }
+    }
+
+    private fun showBurPassportReminder() {
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this)
+            .setTitle("Напоминание")
+            .setMessage(
+                "Не забудь сфотографировать паспорт БУР-1.\n\n" +
+                    "Перейти на страницу «Паспорт БУР-1»?"
+            )
+            .setPositiveButton("Да") { _, _ -> mainPager.setCurrentItem(1, true) }
+            .setNegativeButton("Нет", null)
+            .show()
     }
 
     private fun saveFlightMetadata(
