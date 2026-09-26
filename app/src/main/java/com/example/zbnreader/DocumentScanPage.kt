@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PorterDuff
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
 import android.text.TextWatcher
@@ -241,15 +242,7 @@ class DocumentScanPage(
             minHeight = 0
             minimumHeight = 0
             background = rounded(accentColor, 7f)
-            setOnClickListener {
-                AlertDialog.Builder(context)
-                    .setTitle("Отправить данные в облако")
-                    .setItems(arrayOf("Вручную", "Автоматически")) { _, selected ->
-                        if (selected == 0) openCloudInBrowser() else onAutomaticUpload()
-                    }
-                    .setNegativeButton("Отмена", null)
-                    .show()
-            }
+            setOnClickListener { showCloudModeDialog() }
         }
         addView(cloudButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)).apply {
             topMargin = dp(7)
@@ -261,7 +254,7 @@ class DocumentScanPage(
             } else {
                 R.drawable.zbn_helipad_night
             })
-            scaleType = ImageView.ScaleType.FIT_END
+            scaleType = ImageView.ScaleType.CENTER_CROP
             alpha = if (palette.isLight) 0.88f else 1f
             contentDescription = null
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -326,6 +319,86 @@ class DocumentScanPage(
         }
     }
 
+    private fun showCloudModeDialog() {
+        val content = LinearLayout(context).apply {
+            orientation = VERTICAL
+            setPadding(dp(18), dp(15), dp(18), dp(13))
+            background = rounded(surfaceColor, 10f, borderColor)
+        }
+        content.addView(label("ОТПРАВКА В ОБЛАКО", amberColor, 10f), fullWidth(bottom = 5))
+        content.addView(TextView(context).apply {
+            text = "Выберите способ отправки"
+            textSize = 18f
+            typeface = resources.getFont(R.font.zbn_sans_bold)
+            setTextColor(textColor)
+        }, fullWidth(bottom = 13))
+
+        val manual = cloudModeOption(
+            title = "ВРУЧНУЮ",
+            subtitle = "Открыть Nextcloud в браузере"
+        )
+        val automatic = cloudModeOption(
+            title = "АВТОМАТИЧЕСКИ",
+            subtitle = "Отправить сегодняшний комплект борта"
+        )
+        content.addView(manual, LayoutParams(LayoutParams.MATCH_PARENT, dp(57)).apply {
+            bottomMargin = dp(7)
+        })
+        content.addView(automatic, LayoutParams(LayoutParams.MATCH_PARENT, dp(57)))
+        val cancel = TextView(context).apply {
+            text = "ОТМЕНА"
+            textSize = 11f
+            typeface = resources.getFont(R.font.zbn_sans_bold)
+            setTextColor(accentColor)
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(10), dp(2), 0)
+        }
+        content.addView(cancel, LayoutParams(LayoutParams.MATCH_PARENT, dp(38)))
+
+        val dialog = AlertDialog.Builder(context)
+            .setView(content)
+            .create()
+        manual.setOnClickListener {
+            dialog.dismiss()
+            openCloudInBrowser()
+        }
+        automatic.setOnClickListener {
+            dialog.dismiss()
+            onAutomaticUpload()
+        }
+        cancel.setOnClickListener { dialog.dismiss() }
+        dialog.setOnShowListener {
+            dialog.window?.apply {
+                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                setDimAmount(0.68f)
+                setLayout(
+                    (resources.displayMetrics.widthPixels * 0.9f).toInt(),
+                    LayoutParams.WRAP_CONTENT
+                )
+            }
+        }
+        dialog.show()
+    }
+
+    private fun cloudModeOption(title: String, subtitle: String): LinearLayout =
+        LinearLayout(context).apply {
+            orientation = VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(7), dp(14), dp(7))
+            background = rounded(fieldColor, 7f, borderColor)
+            addView(TextView(context).apply {
+                text = title
+                textSize = 12.5f
+                typeface = resources.getFont(R.font.zbn_sans_bold)
+                setTextColor(textColor)
+            }, fullWidth(bottom = 2))
+            addView(TextView(context).apply {
+                text = subtitle
+                textSize = 9.5f
+                setTextColor(mutedColor)
+            }, fullWidth())
+        }
+
     private fun currentTail(): String = DocumentFileName.normalizeTailNumber(
         prefs.getString(DocumentFileName.PREF_LAST_TAIL, "").orEmpty()
     )
@@ -370,11 +443,10 @@ class DocumentScanPage(
             view.text = (if (done) "✓ " else "○ ") + labels.getValue(step)
             view.setTextColor(if (done) passportSavedColor else mutedColor)
         }
-        val board = if (tail.isEmpty()) "БОРТ НЕ ОПРЕДЕЛЁН" else "RA-$tail"
         checklistTitle.text = if (completed == checklistViews.size) {
-            "КОМПЛЕКТ ГОТОВ · $board"
+            "ЧЕК-ЛИСТ ГОТОВ · СЕГОДНЯ ($completed/${checklistViews.size})"
         } else {
-            "КОМПЛЕКТ $board · СЕГОДНЯ ($completed/${checklistViews.size})"
+            "ЧЕК-ЛИСТ · СЕГОДНЯ ($completed/${checklistViews.size})"
         }
         checklistTitle.setTextColor(if (completed == checklistViews.size) passportSavedColor else amberColor)
     }
