@@ -9,11 +9,11 @@ class ZbnMetadataReader(
     private val port: UsbSerialPort,
     private val catalogBaudRate: Int = 115200,
     private val metadataBaudRate: Int = 921600,
-    private val extendedDiagnostics: Boolean = false,
+    private val rawPageDiagnostic: (FlightRecord, Int, ByteArray) -> Unit = { _, _, _ -> },
     private val diagnostic: (String) -> Unit = {}
 ) {
     fun read(record: FlightRecord): ZbnDecodedMetadata {
-        val raw = readRawPage(record, record.startAddress, includeHexDump = extendedDiagnostics)
+        val raw = readRawPage(record, record.startAddress)
         return if (raw.size == FIXED_PAGE_SIZE) {
             decodePage(raw, record.number, record.startAddress)
         } else {
@@ -25,11 +25,7 @@ class ZbnMetadataReader(
     }
 
     /** Reads one 32-sector page without changing anything in ZBN memory. */
-    fun readRawPage(
-        record: FlightRecord,
-        address: Int,
-        includeHexDump: Boolean = false
-    ): ByteArray {
+    fun readRawPage(record: FlightRecord, address: Int): ByteArray {
         require(address in 0..0xFFFFE0 && address and 31 == 0)
         require(record.memoryBank in 1..2) { "Неизвестный банк памяти ЗБН" }
 
@@ -60,7 +56,7 @@ class ZbnMetadataReader(
             Thread.sleep(30)
             setBaudRate(metadataBaudRate)
             diagnostic("META_RX №${record.number}: скорость приёма $metadataBaudRate бод")
-            return readPage(record, address, includeHexDump)
+            return readPage(record, address)
         } finally {
             try {
                 setBaudRate(catalogBaudRate)
@@ -71,65 +67,75 @@ class ZbnMetadataReader(
         }
     }
 
-    private fun readPage(
-        record: FlightRecord,
-        address: Int,
-        includeHexDump: Boolean
-    ): ByteArray {
+    private fun readPage(record: FlightRecord, address: Int): ByteArray {
         val response = ByteArrayOutputStream()
         // Short responses are unverified: silence may also mean lost bytes.
         val chunk = ByteArray(4096)
         val chunkSizes = mutableListOf<Int>()
         var emptyReads = 0
         val deadline = System.nanoTime() + 15_000_000_000L
-        while (response.size() < FIXED_PAGE_SIZE) {
-            if (System.nanoTime() >= deadline) {
-                throw IOException(
-                    describePartialResponse(
-                        response.toByteArray(),
-                        address,
-                        chunkSizes,
-                        FIXED_PAGE_SIZE
-                    )
-                )
-            }
-            val count = port.read(chunk, 1000)
-            if (count > 0) {
-                if (response.size() + count > FIXED_PAGE_SIZE)
+        try {
+            while (response.size() < FIXED_PAGE_SIZE) {
+                if (System.nanoTime() >= deadline) {
                     throw IOException(
-                        "Лишние данные страницы: принято ${response.size()} + $count, " +
-                            "максимум $FIXED_PAGE_SIZE"
+                        describePartialResponse(
+                            response.toByteArray(),
+                            address,
+                            chunkSizes,
+                            FIXED_PAGE_SIZE
+                        )
                     )
-                response.write(chunk, 0, count)
-                chunkSizes.add(count)
-                emptyReads = 0
-            } else if (response.size() > 0) {
-                emptyReads++
-                if (emptyReads >= END_OF_RESPONSE_EMPTY_READS) break
+                }
+                val count = port.read(chunk, 1000)
+                if (count > 0) {
+                    if (response.size() + count > FIXED_PAGE_SIZE) {
+                        response.write(chunk, 0, count)
+                        throw IOException(
+                            "Лишние данные страницы: принято ${response.size()} байт, " +
+                                "максимум $FIXED_PAGE_SIZE"
+                        )
+                    }
+                    response.write(chunk, 0, count)
+                    chunkSizes.add(count)
+                    emptyReads = 0
+                } else if (response.size() > 0) {
+                    emptyReads++
+                    if (emptyReads >= END_OF_RESPONSE_EMPTY_READS) break
+                }
             }
+        } catch (e: Exception) {
+            captureRaw(record, address, response.toByteArray())
+            throw e
         }
         val raw = response.toByteArray()
         // Observed end-of-transfer sequence. Short raw replies also need it:
         // otherwise the next ENQ can arrive while the ZBN is still in transfer.
         // PCAP switches back to 115200 before this sequence and its final ACK.
-        setBaudRate(catalogBaudRate)
-        port.write(byteArrayOf(0x06, 0x05, 0x06), 1000)
-        val finalAck = ByteArray(4096)
-        val finalAckCount = port.read(finalAck, 1000)
-        if (finalAckCount != 1 || finalAck[0] != 0x06.toByte()) {
-            diagnostic("META_END №${record.number}: финальный ACK не получен ($finalAckCount байт)")
+        try {
+            setBaudRate(catalogBaudRate)
+            port.write(byteArrayOf(0x06, 0x05, 0x06), 1000)
+            val finalAck = ByteArray(4096)
+            val finalAckCount = port.read(finalAck, 1000)
+            if (finalAckCount != 1 || finalAck[0] != 0x06.toByte()) {
+                diagnostic("META_END №${record.number}: финальный ACK не получен ($finalAckCount байт)")
+            }
+        } finally {
+            // Persist after receiving the data even if the closing ACK fails.
+            captureRaw(record, address, raw)
         }
-        // Log only AFTER receiving: formatting HEX during USB reads can lose data.
+        // The complete response is in a binary file; text remains readable.
         diagnostic("META_RX №${record.number}: address=0x${address.toString(16)}, " +
             "bytes=${raw.size}/$FIXED_PAGE_SIZE, chunks=${chunkSizes.size}")
-        if (includeHexDump) diagnostic("META_CHUNKS №${record.number}: $chunkSizes")
-        if (includeHexDump) {
-            for (offset in raw.indices step 512) {
-                diagnostic("META_HEX №${record.number} offset=$offset: " +
-                    raw.toHex(offset, minOf(offset + 512, raw.size)))
-            }
-        }
         return raw
+    }
+
+    private fun captureRaw(record: FlightRecord, address: Int, raw: ByteArray) {
+        if (raw.isEmpty()) return
+        try {
+            rawPageDiagnostic(record, address, raw)
+        } catch (e: Exception) {
+            diagnostic("META_RAW №${record.number}: не удалось сохранить ${raw.size} байт: ${e.message}")
+        }
     }
 
     private fun setBaudRate(baudRate: Int) {

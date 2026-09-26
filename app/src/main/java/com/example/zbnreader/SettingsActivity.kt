@@ -175,14 +175,6 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(0, 20, 0, 12)
         }
 
-        val switchExtendedDiagnostics = SwitchCompat(this).apply {
-            text = "Расширенная диагностика (полный HEX страниц ЗБН)"
-            textSize = 14f
-            setTextColor(COLOR_TEXT)
-            isChecked = prefs.getBoolean("zbn_extended_diagnostics", false)
-            setPadding(0, 20, 0, 12)
-        }
-
         val btnDemoConnection = Button(this).apply {
             text = "ПОКАЗАТЬ АНИМАЦИЮ СВЯЗИ"
             setTextColor(COLOR_TEXT)
@@ -221,7 +213,6 @@ class SettingsActivity : AppCompatActivity() {
                     putInt("reg_speed", spinnerRegSpeed.selectedItemPosition)
                     putInt("baud_rate", selectedBaud)
                     putBoolean("zbn_connection_scene_enabled", switchConnectionScene.isChecked)
-                    putBoolean("zbn_extended_diagnostics", switchExtendedDiagnostics.isChecked)
                     putBoolean(ZbnTheme.PREF_LIGHT_THEME, switchLightTheme.isChecked)
                     apply()
                 }
@@ -241,7 +232,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // 4. Кнопка сохранения логов
         val btnSaveLog = Button(this).apply {
-            text = "СОХРАНИТЬ ЛОГ ОШИБОК"
+            text = "СОХРАНИТЬ ЛОГ И ДИАГНОСТИКУ"
             setTextColor(COLOR_TEXT)
             textSize = 14f
             background = createRoundedDrawable(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
@@ -265,7 +256,6 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(createLabel("Оформление:"))
         root.addView(switchLightTheme)
         root.addView(switchConnectionScene)
-        root.addView(switchExtendedDiagnostics)
         root.addView(btnDemoConnection, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
@@ -305,14 +295,10 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun saveLogFile() {
     try {
-        // Получаем исходный лог файл из папки приложения
+        // Сохраняем текстовый журнал и все сырые ответы страниц одним архивом.
         val logDir = File(getExternalFilesDir(null), "ZBNreader")
         val sourceLogFile = File(logDir, "zbn_app_log.txt")
-
-        if (!sourceLogFile.exists() || sourceLogFile.length() == 0L) {
-            Toast.makeText(this, "Файл лога пуст или еще не создан", Toast.LENGTH_SHORT).show()
-            return
-        }
+        val rawDir = File(logDir, ZbnRawCapture.DIRECTORY_NAME)
 
         // Жестко указываем корень телефона (благо разрешение MANAGE_EXTERNAL_STORAGE получено)
         val zbsFolder = ZbnStorage.rootFolder()
@@ -322,21 +308,19 @@ class SettingsActivity : AppCompatActivity() {
 
         // Создаем имя файла с меткой времени
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val destLogFile = File(zbsFolder, "zbn_app_log_$timeStamp.txt")
-
-        // Копируем содержимое файла
-        sourceLogFile.copyTo(destLogFile, overwrite = true)
+        val archive = File.createTempFile("zbn_diagnostics_${timeStamp}_", ".zip", zbsFolder)
+        val rawCount = ZbnRawCapture.export(sourceLogFile, rawDir, archive)
 
         Toast.makeText(
             this,
-            "Лог успешно сохранен в ${ZbnStorage.ROOT_FOLDER_NAME}/${destLogFile.name}",
+            "Журнал и $rawCount файлов ЗБН: ${ZbnStorage.ROOT_FOLDER_NAME}/${archive.name}",
             Toast.LENGTH_LONG
         ).show()
 
-        android.util.Log.i("SettingsActivity", "Лог сохранен в: ${destLogFile.absolutePath}")
+        android.util.Log.i("SettingsActivity", "Диагностика сохранена в: ${archive.absolutePath}")
     } catch (e: Exception) {
-        Toast.makeText(this, "Ошибка при сохранении лога: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-        android.util.Log.e("SettingsActivity", "Ошибка сохранения лога", e)
+        Toast.makeText(this, "Ошибка сохранения диагностики: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        android.util.Log.e("SettingsActivity", "Ошибка сохранения диагностики", e)
     }
 }
 
