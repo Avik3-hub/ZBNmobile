@@ -128,7 +128,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         val nextcloudHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
             background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
             setPadding(24, 20, 24, 20)
             addView(TextView(this@SettingsActivity).apply {
@@ -137,11 +137,16 @@ class SettingsActivity : AppCompatActivity() {
                 typeface = resources.getFont(R.font.zbn_sans_bold)
                 setTextColor(palette.amber)
                 gravity = Gravity.CENTER_VERTICAL
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(nextcloudArrow, LinearLayout.LayoutParams(
+            }, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ))
+            addView(nextcloudArrow, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = 10
+            })
             setOnClickListener {
                 val expand = nextcloudSection.visibility != View.VISIBLE
                 nextcloudSection.visibility = if (expand) View.VISIBLE else View.GONE
