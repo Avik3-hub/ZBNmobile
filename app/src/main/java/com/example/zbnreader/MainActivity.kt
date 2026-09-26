@@ -60,9 +60,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
     private lateinit var btnStart: Button
-    private lateinit var btnCopySelected: Button
-    private lateinit var btnFullDump: Button
-    private lateinit var btnExportExcel: Button
+    private lateinit var btnCopySelected: ActionButton
+    private lateinit var btnFullDump: ActionButton
+    private lateinit var btnExportExcel: ActionButton
     private lateinit var progressBar: ProgressBar
     private lateinit var tableLayout: TableLayout
     private lateinit var tableScroll: HorizontalScrollView
@@ -73,6 +73,48 @@ class MainActivity : AppCompatActivity() {
     private var observedUsbId: Int? = null
     private var usbReceiverRegistered = false
     private var catalogReadProblem = false
+
+    private inner class ActionButton(
+        context: Context,
+        label: String,
+        iconRes: Int
+    ) : LinearLayout(context) {
+        private val iconView = ImageView(context)
+        private val labelView = TextView(context)
+
+        init {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER
+            isClickable = true
+            isFocusable = true
+            contentDescription = label
+
+            iconView.apply {
+                setImageResource(iconRes)
+                scaleType = ImageView.ScaleType.CENTER
+            }
+            addView(iconView, LayoutParams(dp(18), dp(18)))
+
+            labelView.apply {
+                text = label
+                textSize = 10.5f
+                includeFontPadding = false
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            addView(labelView, LayoutParams(
+                LayoutParams.WRAP_CONTENT,
+                LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = dp(6)
+            })
+        }
+
+        fun applyVisualState(textColor: Int, enabled: Boolean) {
+            labelView.setTextColor(textColor)
+            iconView.setColorFilter(COLOR_ACCENT)
+            iconView.imageAlpha = if (enabled) 255 else 190
+        }
+    }
     private val connectionUsbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             refreshConnectionUsb()
@@ -321,37 +363,31 @@ class MainActivity : AppCompatActivity() {
         val btnParams = LinearLayout.LayoutParams(0, dp(34), 1f).apply {
             setMargins(dp(3), 0, dp(3), 0)
         }
-        btnCopySelected = Button(this).apply {
-            text = "Копировать"
-            textSize = 10.5f
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_copy, 0, 0, 0)
-            compoundDrawablePadding = dp(2)
-            gravity = Gravity.CENTER
-            setPadding(dp(4), 0, dp(4), 0)
+        btnCopySelected = ActionButton(
+            this,
+            "КОПИРОВАТЬ",
+            R.drawable.ic_action_copy
+        ).apply {
             setOnClickListener { copySelectedFlight() }
         }
         btnCopySelected.layoutParams = btnParams
         setCustomButtonState(btnCopySelected, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
 
-        btnFullDump = Button(this).apply {
-            text = "ВЕСЬ ЗБН"
-            textSize = 10.5f
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_storage, 0, 0, 0)
-            compoundDrawablePadding = dp(2)
-            gravity = Gravity.CENTER
-            setPadding(dp(4), 0, dp(4), 0)
+        btnFullDump = ActionButton(
+            this,
+            "ВЕСЬ ЗБН",
+            R.drawable.ic_action_storage
+        ).apply {
             setOnClickListener { executeFullDumpCommand() }
         }
         btnFullDump.layoutParams = btnParams
         setCustomButtonState(btnFullDump, false, COLOR_SURFACE_CONTAINER, COLOR_TEXT, 16f)
 
-        btnExportExcel = Button(this).apply {
-            text = "В Excel"
-            textSize = 10.5f
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_action_table, 0, 0, 0)
-            compoundDrawablePadding = dp(2)
-            gravity = Gravity.CENTER
-            setPadding(dp(4), 0, dp(4), 0)
+        btnExportExcel = ActionButton(
+            this,
+            "В EXCEL",
+            R.drawable.ic_action_table
+        ).apply {
             setOnClickListener { exportToExcel() }
         }
         btnExportExcel.layoutParams = btnParams
@@ -580,6 +616,29 @@ class MainActivity : AppCompatActivity() {
         } else {
             button.background = createRoundedDrawable(COLOR_DISABLED_BG, cornerRadius, COLOR_BORDER, 1)
             button.setTextColor(COLOR_TEXT_MUTED)
+        }
+    }
+
+    private fun setCustomButtonState(
+        button: ActionButton,
+        enabled: Boolean,
+        activeBg: Int,
+        activeText: Int,
+        radiusDp: Float
+    ) {
+        button.isEnabled = enabled
+        val cornerRadius = radiusDp.coerceAtMost(8f)
+        if (enabled) {
+            button.background = createRoundedDrawable(activeBg, cornerRadius)
+            button.applyVisualState(activeText, true)
+        } else {
+            button.background = createRoundedDrawable(
+                COLOR_DISABLED_BG,
+                cornerRadius,
+                COLOR_BORDER,
+                1
+            )
+            button.applyVisualState(COLOR_TEXT_MUTED, false)
         }
     }
 
