@@ -10,7 +10,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import java.io.File
 import java.text.SimpleDateFormat
@@ -149,12 +152,16 @@ class SettingsActivity : AppCompatActivity() {
             })
             setOnClickListener {
                 val expand = nextcloudSection.visibility != View.VISIBLE
-                nextcloudSection.visibility = if (expand) View.VISIBLE else View.GONE
-                nextcloudArrow.rotation = if (expand) 90f else 0f
-                nextcloudArrow.contentDescription = if (expand) {
-                    "Свернуть настройки облака"
-                } else {
-                    "Развернуть настройки облака"
+                if (!expand) {
+                    nextcloudSection.visibility = View.GONE
+                    nextcloudArrow.rotation = 0f
+                    nextcloudArrow.contentDescription = "Развернуть настройки облака"
+                    return@setOnClickListener
+                }
+                authenticateCloudSettings {
+                    nextcloudSection.visibility = View.VISIBLE
+                    nextcloudArrow.rotation = 90f
+                    nextcloudArrow.contentDescription = "Свернуть настройки облака"
                 }
             }
         }
@@ -323,6 +330,43 @@ class SettingsActivity : AppCompatActivity() {
         android.util.Log.e("SettingsActivity", "Ошибка сохранения диагностики", e)
     }
 }
+
+    private fun authenticateCloudSettings(onSuccess: () -> Unit) {
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        if (BiometricManager.from(this).canAuthenticate(authenticators) !=
+            BiometricManager.BIOMETRIC_SUCCESS
+        ) {
+            Toast.makeText(
+                this,
+                "Настройте отпечаток, распознавание лица или PIN в телефоне",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    onSuccess()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    Toast.makeText(this@SettingsActivity, "Доступ не подтверждён", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+        prompt.authenticate(
+            BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Защита облачных настроек")
+                .setSubtitle("Подтвердите личность для просмотра пароля")
+                .setAllowedAuthenticators(authenticators)
+                .build()
+        )
+    }
 
     private data class SecureField(val container: LinearLayout, val input: EditText)
 
