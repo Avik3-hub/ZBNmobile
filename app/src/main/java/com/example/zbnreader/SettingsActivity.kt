@@ -97,35 +97,57 @@ class SettingsActivity : AppCompatActivity() {
             background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
             setPadding(24, 20, 24, 20)
         }
-        val nextcloudUser = EditText(this).apply {
-            setText(nextcloud.username)
-            textSize = 13f
-            setTextColor(COLOR_TEXT)
+        val nextcloudUser = createSecureField(
+            value = nextcloud.username,
             hint = "Имя пользователя Nextcloud"
-            setHintTextColor(palette.muted)
-            setSingleLine(true)
-            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
-            setPadding(24, 20, 24, 20)
-        }
-        val nextcloudPassword = EditText(this).apply {
-            textSize = 13f
-            setTextColor(COLOR_TEXT)
-            hint = if (nextcloud.appPassword.isNotBlank()) {
-                "Пароль приложения сохранён"
-            } else {
-                "Пароль приложения Nextcloud"
-            }
-            setHintTextColor(palette.muted)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true)
-            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
-            setPadding(24, 20, 24, 20)
-        }
-        val aircraftTypeSpinner = createCustomSpinner(
-            NextcloudConfig.AIRCRAFT_TYPES,
-            NextcloudConfig.AIRCRAFT_TYPES.indexOf(nextcloud.aircraftType).coerceAtLeast(0)
         )
+        val nextcloudPassword = createSecureField(
+            value = nextcloud.appPassword,
+            hint = "Пароль приложения Nextcloud"
+        )
+        val mi8TBoards = nextcloud.mi8TBoards.toMutableSet()
+        val mi8AmtBoards = nextcloud.mi8AmtBoards.toMutableSet()
+        val nextcloudSection = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(12, 0, 12, 8)
+            addView(createLabel("Адрес сервера:"))
+            addView(nextcloudUrl)
+            addView(createLabel("Имя пользователя:"))
+            addView(nextcloudUser.container)
+            addView(createLabel("Пароль приложения:"))
+            addView(nextcloudPassword.container)
+            addView(createBoardEditor("МИ-8 Т", mi8TBoards, mi8AmtBoards, "Ми-8 АМТ"))
+            addView(createBoardEditor("МИ-8 АМТ", mi8AmtBoards, mi8TBoards, "Ми-8 Т"))
+        }
+        val nextcloudArrow = TextView(this).apply {
+            text = "›"
+            textSize = 24f
+            setTextColor(palette.amber)
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val nextcloudHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
+            setPadding(24, 20, 24, 20)
+            addView(TextView(this@SettingsActivity).apply {
+                text = "АВТОМАТИЧЕСКАЯ ОТПРАВКА В ОБЛАКО"
+                textSize = 12.5f
+                typeface = resources.getFont(R.font.zbn_sans_bold)
+                setTextColor(palette.amber)
+                gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(nextcloudArrow, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            setOnClickListener {
+                val expand = nextcloudSection.visibility != View.VISIBLE
+                nextcloudSection.visibility = if (expand) View.VISIBLE else View.GONE
+                nextcloudArrow.text = if (expand) "⌄" else "›"
+            }
+        }
 
         val switchConnectionScene = SwitchCompat(this).apply {
             text = "Анимация обмена с ЗБН"
@@ -187,11 +209,10 @@ class SettingsActivity : AppCompatActivity() {
                 NextcloudConfig.save(
                     context = this@SettingsActivity,
                     baseUrl = nextcloudUrl.text.toString(),
-                    username = nextcloudUser.text.toString(),
-                    newPassword = nextcloudPassword.text.toString().takeIf { it.isNotBlank() },
-                    aircraftType = NextcloudConfig.AIRCRAFT_TYPES[
-                        aircraftTypeSpinner.selectedItemPosition
-                    ]
+                    username = nextcloudUser.input.text.toString(),
+                    newPassword = nextcloudPassword.input.text.toString().takeIf { it.isNotBlank() },
+                    mi8TBoards = mi8TBoards,
+                    mi8AmtBoards = mi8AmtBoards
                 )
 
                 Toast.makeText(this@SettingsActivity, "Настройки сохранены", Toast.LENGTH_SHORT).show()
@@ -229,14 +250,11 @@ class SettingsActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { setMargins(0, 8, 0, 0) })
-        root.addView(createLabel("Автоматическая отправка в Nextcloud:"))
-        root.addView(nextcloudUrl)
-        root.addView(createLabel("Имя пользователя:"))
-        root.addView(nextcloudUser)
-        root.addView(createLabel("Пароль приложения:"))
-        root.addView(nextcloudPassword)
-        root.addView(createLabel("Тип вертолёта (проверяется первым):"))
-        root.addView(aircraftTypeSpinner)
+        root.addView(nextcloudHeader, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { setMargins(0, 20, 0, 0) })
+        root.addView(nextcloudSection)
 
         val saveParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -302,6 +320,150 @@ class SettingsActivity : AppCompatActivity() {
     }
 }
 
+    private data class SecureField(val container: FrameLayout, val input: EditText)
+
+    private fun createSecureField(value: String, hint: String): SecureField {
+        val input = EditText(this).apply {
+            setText(value)
+            this.hint = hint
+            textSize = 13f
+            setTextColor(COLOR_TEXT)
+            setHintTextColor(palette.muted)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
+            setPadding(24, 20, dp(54), 20)
+        }
+        val eye = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_view)
+            setColorFilter(palette.muted)
+            background = null
+            contentDescription = "Показать значение"
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            var visible = false
+            setOnClickListener {
+                visible = !visible
+                input.inputType = android.text.InputType.TYPE_CLASS_TEXT or if (visible) {
+                    android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                } else {
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                }
+                input.setSelection(input.text.length)
+                setColorFilter(if (visible) COLOR_ACCENT else palette.muted)
+                contentDescription = if (visible) "Скрыть значение" else "Показать значение"
+            }
+        }
+        val container = FrameLayout(this).apply {
+            addView(input, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ))
+            addView(eye, FrameLayout.LayoutParams(
+                dp(48),
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.END or Gravity.CENTER_VERTICAL
+            ))
+        }
+        return SecureField(container, input)
+    }
+
+    private fun createBoardEditor(
+        title: String,
+        boards: MutableSet<String>,
+        otherBoards: Set<String>,
+        otherTitle: String
+    ): LinearLayout {
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        lateinit var render: () -> Unit
+        render = {
+            list.removeAllViews()
+            boards.sorted().forEach { board ->
+                list.addView(LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    background = createRoundedDrawable(palette.surfaceContainer, 8f, COLOR_BORDER, 1)
+                    setPadding(dp(12), 0, dp(4), 0)
+                    addView(TextView(this@SettingsActivity).apply {
+                        text = board
+                        textSize = 13f
+                        setTextColor(COLOR_TEXT)
+                        gravity = Gravity.CENTER_VERTICAL
+                    }, LinearLayout.LayoutParams(0, dp(38), 1f).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                    })
+                    addView(TextView(this@SettingsActivity).apply {
+                        text = "×"
+                        textSize = 22f
+                        gravity = Gravity.CENTER
+                        setTextColor(palette.error)
+                        contentDescription = "Удалить борт $board"
+                        setOnClickListener {
+                            boards.remove(board)
+                            render()
+                        }
+                    }, LinearLayout.LayoutParams(dp(40), dp(38)))
+                }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = dp(5) })
+            }
+        }
+
+        val input = EditText(this).apply {
+            hint = "Номер борта"
+            textSize = 13f
+            setTextColor(COLOR_TEXT)
+            setHintTextColor(palette.muted)
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(android.text.InputFilter.LengthFilter(8))
+            setSingleLine(true)
+            background = createRoundedDrawable(COLOR_SURFACE, 8f, COLOR_BORDER, 1)
+            setPadding(dp(12), 0, dp(12), 0)
+        }
+        val add = TextView(this).apply {
+            text = "+"
+            textSize = 24f
+            gravity = Gravity.CENTER
+            setTextColor(COLOR_ACCENT_TEXT)
+            background = createRoundedDrawable(COLOR_ACCENT, 8f)
+            contentDescription = "Добавить борт в $title"
+            setOnClickListener {
+                val board = DocumentFileName.normalizeTailNumber(input.text.toString())
+                when {
+                    board.isBlank() -> Toast.makeText(
+                        this@SettingsActivity,
+                        "Введите номер борта",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    board in otherBoards -> Toast.makeText(
+                        this@SettingsActivity,
+                        "Борт $board уже находится в категории $otherTitle",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    boards.add(board) -> {
+                        input.text.clear()
+                        render()
+                    }
+                }
+            }
+        }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(createLabel(title))
+            addView(list)
+            addView(LinearLayout(this@SettingsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(input, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                    marginEnd = dp(6)
+                })
+                addView(add, LinearLayout.LayoutParams(dp(48), dp(42)))
+            })
+            render()
+        }
+    }
+
     private fun createLabel(text: String) = TextView(this).apply {
         this.text = text
         setTextColor(COLOR_TEXT)
@@ -352,6 +514,8 @@ class SettingsActivity : AppCompatActivity() {
     companion object {
         private const val DEFAULT_BAUD_RATE = 115200
     }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun createRoundedDrawable(bgColor: Int, radiusDp: Float, strokeColor: Int = 0, strokeWidthPx: Int = 0): GradientDrawable {
         val radius = radiusDp * resources.displayMetrics.density

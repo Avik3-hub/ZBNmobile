@@ -644,8 +644,8 @@ class MainActivity : AppCompatActivity() {
             AlertDialog.Builder(this)
                 .setTitle("Настройка Nextcloud")
                 .setMessage(
-                    "Для автоматической отправки укажите имя пользователя, пароль приложения " +
-                        "и тип вертолёта в настройках."
+                    "Для автоматической отправки укажите имя пользователя " +
+                        "и пароль приложения в настройках."
                 )
                 .setPositiveButton("Открыть настройки") { _, _ ->
                     startActivity(Intent(this, SettingsActivity::class.java))

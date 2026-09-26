@@ -43,9 +43,9 @@ class NextcloudUploader(private val settings: NextcloudSettings) {
     }
 
     private fun aircraftTypeFor(tail: String): String = when (tail) {
-        in MI8_T_BOARDS -> "Ми-8 Т"
-        in MI8_AMT_BOARDS -> "Ми-8 АМТ"
-        else -> settings.aircraftType
+        in settings.mi8TBoards -> "Ми-8 Т"
+        in settings.mi8AmtBoards -> "Ми-8 АМТ"
+        else -> throw UnknownBoardException(tail)
     }
 
     private fun uploadFile(url: String, file: File, destination: String) {
@@ -90,6 +90,9 @@ class NextcloudUploader(private val settings: NextcloudSettings) {
     private fun readableError(error: Exception): String {
         val message = error.localizedMessage.orEmpty()
         return when {
+            error is UnknownBoardException ->
+                "Борт ${error.tail} отсутствует в списке Ми-8 Т и Ми-8 АМТ. " +
+                    "Файлы не отправлены."
             error is MissingFolderException ->
                 "Папка «${error.destination}» не найдена в облаке. " +
                     "Файлы не отправлены, папки приложение не создавало."
@@ -103,13 +106,6 @@ class NextcloudUploader(private val settings: NextcloudSettings) {
     }
 
     private class MissingFolderException(val destination: String) : Exception()
+    private class UnknownBoardException(val tail: String) : Exception()
 
-    companion object {
-        private val MI8_T_BOARDS = setOf("06105", "22963", "24129", "24594")
-        private val MI8_AMT_BOARDS = setOf(
-            "22232", "22271", "22272", "22436", "22454", "22459",
-            "22462", "22464", "22465", "22466", "22468", "22469",
-            "22967", "25325"
-        )
-    }
 }

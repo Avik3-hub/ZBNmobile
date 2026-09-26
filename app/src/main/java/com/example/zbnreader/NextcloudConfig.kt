@@ -14,7 +14,8 @@ data class NextcloudSettings(
     val baseUrl: String,
     val username: String,
     val appPassword: String,
-    val aircraftType: String
+    val mi8TBoards: Set<String>,
+    val mi8AmtBoards: Set<String>
 ) {
     val isComplete: Boolean
         get() = baseUrl.isNotBlank() && username.isNotBlank() && appPassword.isNotBlank()
@@ -22,14 +23,14 @@ data class NextcloudSettings(
 
 object NextcloudConfig {
     const val DEFAULT_BASE_URL = "https://81.89.69.171/nextcloud"
-    val AIRCRAFT_TYPES = arrayOf("Ми-8 АМТ", "Ми-8 Т")
 
     private const val PREFS = "NextcloudSettings"
     private const val KEY_BASE_URL = "base_url"
     private const val KEY_USERNAME = "username"
     private const val KEY_PASSWORD = "password_encrypted"
     private const val KEY_PASSWORD_IV = "password_iv"
-    private const val KEY_AIRCRAFT_TYPE = "aircraft_type"
+    private const val KEY_MI8_T_BOARDS = "mi8_t_boards"
+    private const val KEY_MI8_AMT_BOARDS = "mi8_amt_boards"
     private const val KEYSTORE_ALIAS = "zbn_nextcloud_credentials"
 
     fun load(context: Context): NextcloudSettings {
@@ -41,7 +42,8 @@ object NextcloudConfig {
                 prefs.getString(KEY_PASSWORD, null),
                 prefs.getString(KEY_PASSWORD_IV, null)
             ),
-            aircraftType = prefs.getString(KEY_AIRCRAFT_TYPE, AIRCRAFT_TYPES.first()).orEmpty()
+            mi8TBoards = loadBoards(prefs, KEY_MI8_T_BOARDS, DEFAULT_MI8_T_BOARDS),
+            mi8AmtBoards = loadBoards(prefs, KEY_MI8_AMT_BOARDS, DEFAULT_MI8_AMT_BOARDS)
         )
     }
 
@@ -50,13 +52,15 @@ object NextcloudConfig {
         baseUrl: String,
         username: String,
         newPassword: String?,
-        aircraftType: String
+        mi8TBoards: Set<String>,
+        mi8AmtBoards: Set<String>
     ) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val editor = prefs.edit()
             .putString(KEY_BASE_URL, normalizeBaseUrl(baseUrl))
             .putString(KEY_USERNAME, username.trim())
-            .putString(KEY_AIRCRAFT_TYPE, aircraftType)
+            .putStringSet(KEY_MI8_T_BOARDS, normalizeBoards(mi8TBoards))
+            .putStringSet(KEY_MI8_AMT_BOARDS, normalizeBoards(mi8AmtBoards))
 
         if (!newPassword.isNullOrBlank()) {
             val encrypted = encryptPassword(newPassword)
@@ -72,6 +76,17 @@ object NextcloudConfig {
 
     private fun normalizeBaseUrl(value: String): String =
         value.trim().ifEmpty { DEFAULT_BASE_URL }.trimEnd('/')
+
+    private fun loadBoards(
+        prefs: android.content.SharedPreferences,
+        key: String,
+        defaults: Set<String>
+    ): Set<String> = normalizeBoards(prefs.getStringSet(key, null) ?: defaults)
+
+    private fun normalizeBoards(values: Set<String>): Set<String> = values
+        .map(DocumentFileName::normalizeTailNumber)
+        .filter { it.isNotBlank() }
+        .toSortedSet()
 
     private fun encryptPassword(password: String): Pair<String, String> {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -111,4 +126,11 @@ object NextcloudConfig {
             generateKey()
         }
     }
+
+    private val DEFAULT_MI8_T_BOARDS = setOf("06105", "22963", "24129", "24594")
+    private val DEFAULT_MI8_AMT_BOARDS = setOf(
+        "22232", "22271", "22272", "22436", "22454", "22459",
+        "22462", "22464", "22465", "22466", "22468", "22469",
+        "22967", "25325"
+    )
 }
