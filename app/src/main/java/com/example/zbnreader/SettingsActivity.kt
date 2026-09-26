@@ -88,11 +88,11 @@ class SettingsActivity : AppCompatActivity() {
             getBaudRateIndex(prefs.getInt("baud_rate", DEFAULT_BAUD_RATE))
         )
 
-        val switchPet = SwitchCompat(this).apply {
-            text = "Показывать помощника Ми-171"
+        val switchConnectionScene = SwitchCompat(this).apply {
+            text = "Анимация обмена с ЗБН"
             textSize = 14f
             setTextColor(COLOR_TEXT)
-            isChecked = prefs.getBoolean("mi171_pet_enabled", false)
+            isChecked = prefs.getBoolean("zbn_connection_scene_enabled", true)
             setPadding(0, 20, 0, 12)
         }
 
@@ -103,21 +103,6 @@ class SettingsActivity : AppCompatActivity() {
             isChecked = prefs.getBoolean(ZbnTheme.PREF_LIGHT_THEME, false)
             setPadding(0, 20, 0, 12)
         }
-
-        val petSize = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
-        val normalSize = RadioButton(this).apply {
-            id = View.generateViewId()
-            text = "Обычный"
-            setTextColor(COLOR_TEXT)
-        }
-        val smallSize = RadioButton(this).apply {
-            id = View.generateViewId()
-            text = "Маленький (примерно в 1,5 раза меньше)"
-            setTextColor(COLOR_TEXT)
-        }
-        petSize.addView(normalSize)
-        petSize.addView(smallSize)
-        petSize.check(if (prefs.getBoolean("mi171_pet_small", false)) smallSize.id else normalSize.id)
 
         // 3. Кнопка сохранения
         val btnSave = Button(this).apply {
@@ -140,8 +125,7 @@ class SettingsActivity : AppCompatActivity() {
                     putInt("arinc", spinnerArinc.selectedItemPosition)
                     putInt("reg_speed", spinnerRegSpeed.selectedItemPosition)
                     putInt("baud_rate", selectedBaud)
-                    putBoolean("mi171_pet_enabled", switchPet.isChecked)
-                    putBoolean("mi171_pet_small", petSize.checkedRadioButtonId == smallSize.id)
+                    putBoolean("zbn_connection_scene_enabled", switchConnectionScene.isChecked)
                     putBoolean(ZbnTheme.PREF_LIGHT_THEME, switchLightTheme.isChecked)
                     apply()
                 }
@@ -176,9 +160,7 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(spinnerBaudRate)
         root.addView(createLabel("Оформление:"))
         root.addView(switchLightTheme)
-        root.addView(switchPet)
-        root.addView(createLabel("Размер помощника:"))
-        root.addView(petSize)
+        root.addView(switchConnectionScene)
 
         val saveParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
