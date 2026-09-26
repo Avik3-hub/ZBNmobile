@@ -9,7 +9,6 @@ import android.graphics.Matrix
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaScannerConnection
 import android.os.Bundle
-import android.os.Environment
 import android.util.Size
 import android.view.Gravity
 import android.view.View
@@ -448,7 +447,7 @@ class DocumentScanActivity : AppCompatActivity() {
         val name = DocumentFileName.normalizeCustomFileName(
             intent.getStringExtra(EXTRA_FILE_NAME).orEmpty(), fallbackName
         )
-        val folder = File(Environment.getExternalStorageDirectory(), "ZBNreader/Борт_${tail.ifEmpty { "Неизвестный_Борт" }}")
+        val folder = File(ZbnStorage.rootFolder(), "Борт_${tail.ifEmpty { "Неизвестный_Борт" }}")
         if (!folder.exists() && !folder.mkdirs()) {
             Toast.makeText(this, "Не удалось создать папку для снимка", Toast.LENGTH_LONG).show()
             return
@@ -464,6 +463,7 @@ class DocumentScanActivity : AppCompatActivity() {
                 arrayOf("image/jpeg"),
                 null
             )
+            ZbnStorage.markPassportSaved(this)
             Toast.makeText(this, "Сохранено: ${output.absolutePath}", Toast.LENGTH_LONG).show()
             finish()
         } catch (error: Exception) {

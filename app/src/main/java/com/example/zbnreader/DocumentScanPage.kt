@@ -2,8 +2,10 @@ package com.example.zbnreader
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -15,6 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 
 class DocumentScanPage(context: Context) : LinearLayout(context) {
     private val palette = ZbnTheme.palette(context)
@@ -31,6 +34,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
     private val tailValue = TextView(context)
     private val surnameInput = EditText(context)
     private val fileNameInput = EditText(context)
+    private val scanButton = Button(context)
     private var updatingFileName = false
     private var fileNameEdited = false
     private val megapixels = intArrayOf(1, 2, 3, 5, 8, 12)
@@ -152,7 +156,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         settingsCard.addView(fileNameInput, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)))
         addView(settingsCard, fullWidth(bottom = 8))
 
-        val scanButton = Button(context).apply {
+        scanButton.apply {
             text = "СФОТОГРАФИРОВАТЬ ДОКУМЕНТ"
             textSize = 13f
             typeface = resources.getFont(R.font.zbn_sans_bold)
@@ -184,6 +188,25 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             }
         }
         addView(scanButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)))
+
+        addView(Button(context).apply {
+            text = "ОТПРАВИТЬ ДАННЫЕ В ОБЛАКО"
+            textSize = 13f
+            typeface = resources.getFont(R.font.zbn_sans_bold)
+            setTextColor(accentTextColor)
+            minHeight = 0
+            minimumHeight = 0
+            background = rounded(accentColor, 7f)
+            setOnClickListener {
+                try {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(CLOUD_URL)))
+                } catch (_: Exception) {
+                    Toast.makeText(context, "Не удалось открыть браузер", Toast.LENGTH_LONG).show()
+                }
+            }
+        }, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)).apply {
+            topMargin = dp(7)
+        })
 
         addView(ImageView(context).apply {
             setImageResource(if (palette.isLight) {
@@ -217,6 +240,10 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
     fun refresh() {
         val tail = currentTail()
         tailValue.text = if (tail.isEmpty()) "Не определён" else "RA-$tail"
+        scanButton.background = rounded(
+            if (ZbnStorage.hasPassportSavedToday(context)) passportSavedColor else accentColor,
+            7f
+        )
         updatePreview()
     }
 
@@ -253,4 +280,11 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
     private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
+
+    private val passportSavedColor: Int
+        get() = Color.parseColor(if (palette.isLight) "#55B879" else "#39B978")
+
+    companion object {
+        private const val CLOUD_URL = "https://81.89.69.171/nextcloud/index.php/apps/files/files"
+    }
 }

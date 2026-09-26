@@ -5,7 +5,6 @@ import android.content.Intent
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -221,8 +220,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         // Жестко указываем корень телефона (благо разрешение MANAGE_EXTERNAL_STORAGE получено)
-        val rootDir = Environment.getExternalStorageDirectory()
-        val zbsFolder = File(rootDir, "ZBNreader")
+        val zbsFolder = ZbnStorage.rootFolder()
         if (!zbsFolder.exists()) {
             zbsFolder.mkdirs()
         }
@@ -236,7 +234,7 @@ class SettingsActivity : AppCompatActivity() {
 
         Toast.makeText(
             this,
-            "Лог успешно сохранен в ZBNreader/${destLogFile.name}",
+            "Лог успешно сохранен в ${ZbnStorage.ROOT_FOLDER_NAME}/${destLogFile.name}",
             Toast.LENGTH_LONG
         ).show()
 

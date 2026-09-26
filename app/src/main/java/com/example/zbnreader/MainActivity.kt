@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tableScroll: HorizontalScrollView
     private lateinit var headerTailValue: TextView
     private lateinit var mainPager: ViewPager2
+    private lateinit var documentScanPage: DocumentScanPage
     private lateinit var connectionScene: ZbnConnectionSceneView
     private var observedUsbId: Int? = null
     private var usbReceiverRegistered = false
@@ -448,9 +449,9 @@ class MainActivity : AppCompatActivity() {
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         }, ContextCompat.RECEIVER_EXPORTED)
         usbReceiverRegistered = true
-        val scanPage = DocumentScanPage(this)
+        documentScanPage = DocumentScanPage(this)
         mainPager = ViewPager2(this).apply {
-            adapter = StaticPagesAdapter(listOf(screen, scanPage))
+            adapter = StaticPagesAdapter(listOf(screen, documentScanPage))
             offscreenPageLimit = 1
         }
         val firstTab = pageTab("Снятие ПИ", true)
@@ -470,7 +471,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageSelected(position: Int) {
                 stylePageTab(firstTab, position == 0)
                 stylePageTab(secondTab, position == 1)
-                if (position == 1) scanPage.refresh()
+                if (position == 1) documentScanPage.refresh()
             }
         })
         setContentView(LinearLayout(this).apply {
@@ -593,6 +594,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (::headerTailValue.isInitialized) refreshHeaderTail()
+        if (::documentScanPage.isInitialized) documentScanPage.refresh()
         if (::connectionScene.isInitialized) {
             val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
             connectionScene.setSceneEnabled(
@@ -617,8 +619,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun createMainDirectory() {
         try {
-            val rootDir = Environment.getExternalStorageDirectory()
-            val mainFolder = File(rootDir, "ZBNreader")
+            val mainFolder = ZbnStorage.rootFolder()
             if (!mainFolder.exists()) {
                 mainFolder.mkdirs()
             }
@@ -658,8 +659,7 @@ class MainActivity : AppCompatActivity() {
     private fun getAircraftFolder(tailNum: String): File {
         createMainDirectory()
         val safeTail = tailNum.trim().replace(Regex("[^a-zA-Z0-9_А-Яа-я-]"), "_").ifEmpty { "Неизвестный_Борт" }
-        val rootDir = Environment.getExternalStorageDirectory()
-        val mainFolder = File(rootDir, "ZBNreader")
+        val mainFolder = ZbnStorage.rootFolder()
         val aircraftFolder = File(mainFolder, "Борт_$safeTail")
         if (!aircraftFolder.exists()) {
             aircraftFolder.mkdirs()
