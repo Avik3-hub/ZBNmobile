@@ -340,8 +340,8 @@ class SettingsActivity : AppCompatActivity() {
             setTextColor(COLOR_TEXT)
             setHintTextColor(palette.muted)
             inputType = android.text.InputType.TYPE_CLASS_TEXT
-            transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
             setSingleLine(true)
+            transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
             background = null
             setPadding(24, 20, 8, 20)
         }
