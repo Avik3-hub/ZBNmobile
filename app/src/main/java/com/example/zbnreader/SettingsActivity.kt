@@ -339,8 +339,8 @@ class SettingsActivity : AppCompatActivity() {
             textSize = 13f
             setTextColor(COLOR_TEXT)
             setHintTextColor(palette.muted)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
             setSingleLine(true)
             background = null
             setPadding(24, 20, 8, 20)
@@ -354,10 +354,10 @@ class SettingsActivity : AppCompatActivity() {
             var visible = false
             setOnClickListener {
                 visible = !visible
-                input.inputType = android.text.InputType.TYPE_CLASS_TEXT or if (visible) {
-                    android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                input.transformationMethod = if (visible) {
+                    null
                 } else {
-                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    android.text.method.PasswordTransformationMethod.getInstance()
                 }
                 input.setSelection(input.text.length)
                 setColorFilter(if (visible) COLOR_ACCENT else palette.muted)
