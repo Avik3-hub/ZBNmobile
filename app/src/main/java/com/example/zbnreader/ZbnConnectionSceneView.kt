@@ -73,6 +73,8 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
     private var sceneEnabled = true
     private var usbConnected = false
     private var disconnectSequence = 0
+    private var demoSequence = 0
+    private var demoMode = false
 
     init {
         alpha = 0f
@@ -83,6 +85,7 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
     fun setSceneEnabled(enabled: Boolean) {
         sceneEnabled = enabled
         if (!enabled) {
+            cancelDemo()
             disconnectSequence++
             animate().cancel()
             pulseAnimator?.cancel()
@@ -94,6 +97,7 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
     }
 
     fun setUsbConnected(connected: Boolean) {
+        if (demoMode) cancelDemo()
         usbConnected = connected
         disconnectSequence++
         val sequence = disconnectSequence
@@ -114,7 +118,7 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
     }
 
     fun showStatus(text: String, signal: Signal = Signal.NONE, progress: Int? = null) {
-        if (!sceneEnabled || (!usbConnected && signal != Signal.ERROR)) return
+        if (!sceneEnabled || (!usbConnected && !demoMode && signal != Signal.ERROR)) return
         message = text
         downloadProgress = progress?.coerceIn(0, 100)
         currentSignal = signal
@@ -130,6 +134,61 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
             Signal.RECEIVE,
             percent
         )
+    }
+
+    fun playDemo(recordNumber: Int) {
+        if (!sceneEnabled) return
+        demoSequence++
+        val sequence = demoSequence
+        demoMode = true
+        message = "USB подключён\nОжидание ЗБН…"
+        downloadProgress = null
+        currentSignal = Signal.NONE
+        stopPulse()
+        showConnectedScene()
+
+        demoStep(sequence, 1_200L) {
+            showStatus("Установка связи…", Signal.REQUEST)
+        }
+        demoStep(sequence, 2_600L) {
+            showStatus("ЗБН не отвечает\nПовторная попытка…", Signal.ERROR)
+        }
+        demoStep(sequence, 4_000L) {
+            showStatus("Повторный запрос…", Signal.REQUEST)
+        }
+        demoStep(sequence, 5_300L) {
+            showStatus("ЗБН обнаружен\nACK получен", Signal.SUCCESS)
+        }
+        demoStep(sequence, 6_500L) {
+            showStatus("Чтение оглавления…", Signal.RECEIVE)
+        }
+        for (percent in 0..100 step 5) {
+            demoStep(sequence, 7_600L + (percent / 5) * 120L) {
+                showDownload(recordNumber, percent)
+            }
+        }
+        demoStep(sequence, 10_300L) {
+            showStatus("Полёт №$recordNumber скачан", Signal.SUCCESS, 100)
+        }
+        demoStep(sequence, 12_000L) {
+            demoMode = false
+            if (usbConnected) {
+                setUsbConnected(true)
+            } else {
+                hideScene()
+            }
+        }
+    }
+
+    private fun demoStep(sequence: Int, delayMs: Long, action: () -> Unit) {
+        postDelayed({
+            if (demoMode && sequence == demoSequence) action()
+        }, delayMs)
+    }
+
+    private fun cancelDemo() {
+        demoSequence++
+        demoMode = false
     }
 
     private fun showConnectedScene() {
@@ -283,6 +342,7 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
     }
 
     override fun onDetachedFromWindow() {
+        cancelDemo()
         animate().cancel()
         pulseAnimator?.cancel()
         super.onDetachedFromWindow()

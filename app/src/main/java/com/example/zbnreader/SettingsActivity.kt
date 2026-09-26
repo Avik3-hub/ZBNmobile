@@ -104,6 +104,22 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(0, 20, 0, 12)
         }
 
+        val btnDemoConnection = Button(this).apply {
+            text = "ПОКАЗАТЬ АНИМАЦИЮ СВЯЗИ"
+            setTextColor(COLOR_TEXT)
+            textSize = 13f
+            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
+            setPadding(16, 18, 16, 18)
+            setOnClickListener {
+                prefs.edit()
+                    .putBoolean("zbn_connection_scene_enabled", true)
+                    .putBoolean("zbn_connection_scene_demo_pending", true)
+                    .apply()
+                Toast.makeText(this@SettingsActivity, "Запускаю демонстрацию", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
+
         // 3. Кнопка сохранения
         val btnSave = Button(this).apply {
             text = "СОХРАНИТЬ НАСТРОЙКИ"
@@ -161,6 +177,10 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(createLabel("Оформление:"))
         root.addView(switchLightTheme)
         root.addView(switchConnectionScene)
+        root.addView(btnDemoConnection, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { setMargins(0, 8, 0, 0) })
 
         val saveParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,

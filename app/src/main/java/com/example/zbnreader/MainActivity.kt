@@ -597,6 +597,10 @@ class MainActivity : AppCompatActivity() {
                 prefs.getBoolean("zbn_connection_scene_enabled", true)
             )
             refreshConnectionUsb()
+            if (prefs.getBoolean("zbn_connection_scene_demo_pending", false)) {
+                prefs.edit().putBoolean("zbn_connection_scene_demo_pending", false).apply()
+                connectionScene.playDemo(selectedRecord?.number ?: 6)
+            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (Environment.isExternalStorageManager()) {
