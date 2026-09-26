@@ -51,7 +51,7 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(164, 201, 255)
         textAlign = Paint.Align.CENTER
-        textSize = sp(7.8f)
+        textSize = sp(11.7f)
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     private val progressTrackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -230,13 +230,13 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
         super.onDraw(canvas)
         if (visibility != VISIBLE || width == 0 || height == 0) return
 
-        val laptopWidth = min(dp(100f), width * 0.29f)
+        val laptopWidth = min(dp(150f), width * 0.435f)
         val laptopHeight = laptopWidth * laptop.height / laptop.width.toFloat()
         val laptopRect = RectF(
             0f,
-            height - laptopHeight + dp(2f),
+            height - laptopHeight + dp(8f),
             laptopWidth,
-            height + dp(2f)
+            height + dp(8f)
         )
 
         buildCablePath(laptopRect)
@@ -319,7 +319,7 @@ class ZbnConnectionSceneView(context: Context) : View(context) {
         progressPaint.color = if (currentSignal == Signal.ERROR) Color.rgb(255, 90, 95) else color
 
         val lines = wrapText(message, screen.width() - dp(10f))
-        val lineHeight = dp(9f)
+        val lineHeight = dp(13.5f)
         val textBlockHeight = lines.size * lineHeight
         var baseline = screen.centerY() - textBlockHeight / 2f + lineHeight * 0.8f
         if (downloadProgress != null) baseline -= dp(4f)

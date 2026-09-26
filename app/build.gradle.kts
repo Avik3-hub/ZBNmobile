@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.zbnreader"
         minSdk = 26
         targetSdk = 34
-        versionCode = System.getenv("ZBN_VERSION_CODE")?.toIntOrNull() ?: 5
-        versionName = "1.4.6"
+        versionCode = System.getenv("ZBN_VERSION_CODE")?.toIntOrNull() ?: 6
+        versionName = "1.4.7"
         ndk {
             abiFilters += "arm64-v8a"
         }
