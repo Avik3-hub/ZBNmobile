@@ -5,7 +5,6 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -18,8 +17,14 @@ import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 
-class DocumentScanPage(context: Context) : LinearLayout(context) {
+class DocumentScanPage(
+    context: Context,
+    private val onOpenFlightData: () -> Unit = {},
+    private val onExportExcel: () -> Unit = {},
+    private val onAutomaticUpload: () -> Unit = {}
+) : LinearLayout(context) {
     private val palette = ZbnTheme.palette(context)
     private val backgroundColor = palette.background
     private val surfaceColor = palette.surface
@@ -35,8 +40,12 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
     private val surnameInput = EditText(context)
     private val fileNameInput = EditText(context)
     private val scanButton = Button(context)
+    private val cloudButton = Button(context)
+    private val checklistTitle = TextView(context)
+    private val checklistViews = linkedMapOf<ZbnStorage.ChecklistStep, TextView>()
     private var updatingFileName = false
     private var fileNameEdited = false
+    private var awaitingCloudConfirmation = false
     private val megapixels = intArrayOf(1, 2, 3, 5, 8, 12)
 
     init {
@@ -104,6 +113,41 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         }
         aircraftCard.addView(tailValue, fullWidth())
         addView(aircraftCard, fullWidth(bottom = 8))
+
+        val checklistCard = LinearLayout(context).apply {
+            orientation = VERTICAL
+            setPadding(dp(10), dp(7), dp(10), dp(8))
+            background = rounded(surfaceColor, 9f, borderColor)
+            checklistTitle.apply {
+                textSize = 10f
+                letterSpacing = 0.07f
+                typeface = resources.getFont(R.font.zbn_sans_bold)
+                setTextColor(amberColor)
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            addView(checklistTitle, LayoutParams(LayoutParams.MATCH_PARENT, dp(22)))
+            addView(LinearLayout(context).apply {
+                orientation = HORIZONTAL
+                addView(checklistItem(ZbnStorage.ChecklistStep.FLIGHT_DATA), LayoutParams(0, dp(28), 1f).apply {
+                    marginEnd = dp(3)
+                })
+                addView(checklistItem(ZbnStorage.ChecklistStep.EXCEL), LayoutParams(0, dp(28), 1f).apply {
+                    marginStart = dp(3)
+                })
+            }, LayoutParams(LayoutParams.MATCH_PARENT, dp(28)))
+            addView(LinearLayout(context).apply {
+                orientation = HORIZONTAL
+                addView(checklistItem(ZbnStorage.ChecklistStep.PASSPORT), LayoutParams(0, dp(28), 1f).apply {
+                    marginEnd = dp(3)
+                })
+                addView(checklistItem(ZbnStorage.ChecklistStep.CLOUD), LayoutParams(0, dp(28), 1f).apply {
+                    marginStart = dp(3)
+                })
+            }, LayoutParams(LayoutParams.MATCH_PARENT, dp(28)).apply {
+                topMargin = dp(5)
+            })
+        }
+        addView(checklistCard, fullWidth(bottom = 8))
 
         val settingsCard = LinearLayout(context).apply {
             orientation = VERTICAL
@@ -189,7 +233,7 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         }
         addView(scanButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)))
 
-        addView(Button(context).apply {
+        cloudButton.apply {
             text = "ОТПРАВИТЬ ДАННЫЕ В ОБЛАКО"
             textSize = 13f
             typeface = resources.getFont(R.font.zbn_sans_bold)
@@ -198,13 +242,16 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
             minimumHeight = 0
             background = rounded(accentColor, 7f)
             setOnClickListener {
-                try {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(CLOUD_URL)))
-                } catch (_: Exception) {
-                    Toast.makeText(context, "Не удалось открыть браузер", Toast.LENGTH_LONG).show()
-                }
+                AlertDialog.Builder(context)
+                    .setTitle("Отправить данные в облако")
+                    .setItems(arrayOf("Вручную", "Автоматически")) { _, selected ->
+                        if (selected == 0) openCloudInBrowser() else onAutomaticUpload()
+                    }
+                    .setNegativeButton("Отмена", null)
+                    .show()
             }
-        }, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)).apply {
+        }
+        addView(cloudButton, LayoutParams(LayoutParams.MATCH_PARENT, dp(48)).apply {
             topMargin = dp(7)
         })
 
@@ -241,10 +288,42 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         val tail = currentTail()
         tailValue.text = if (tail.isEmpty()) "Не определён" else "RA-$tail"
         scanButton.background = rounded(
-            if (ZbnStorage.hasPassportSavedToday(context)) passportSavedColor else accentColor,
+            if (ZbnStorage.isStepComplete(context, tail, ZbnStorage.ChecklistStep.PASSPORT)) {
+                passportSavedColor
+            } else {
+                accentColor
+            },
             7f
         )
+        refreshChecklist(tail)
         updatePreview()
+    }
+
+    fun onHostResume() {
+        refresh()
+        if (!awaitingCloudConfirmation) return
+        awaitingCloudConfirmation = false
+        post {
+            AlertDialog.Builder(context)
+                .setTitle("Отправка в облако")
+                .setMessage("Данные успешно отправлены в облако?")
+                .setPositiveButton("Да") { _, _ ->
+                    ZbnStorage.markStep(context, currentTail(), ZbnStorage.ChecklistStep.CLOUD)
+                    refresh()
+                }
+                .setNegativeButton("Нет", null)
+                .show()
+        }
+    }
+
+    private fun openCloudInBrowser() {
+        awaitingCloudConfirmation = true
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(NextcloudConfig.browserUrl(context))))
+        } catch (_: Exception) {
+            awaitingCloudConfirmation = false
+            Toast.makeText(context, "Не удалось открыть браузер", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun currentTail(): String = DocumentFileName.normalizeTailNumber(
@@ -258,6 +337,46 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
         fileNameInput.setText(value)
         fileNameInput.setSelection(value.length)
         updatingFileName = false
+    }
+
+    private fun checklistItem(step: ZbnStorage.ChecklistStep): TextView = TextView(context).apply {
+        textSize = 9.5f
+        typeface = resources.getFont(R.font.zbn_sans_bold)
+        gravity = Gravity.CENTER
+        setPadding(dp(4), 0, dp(4), 0)
+        background = rounded(fieldColor, 6f)
+        setOnClickListener {
+            when (step) {
+                ZbnStorage.ChecklistStep.FLIGHT_DATA -> onOpenFlightData()
+                ZbnStorage.ChecklistStep.EXCEL -> onExportExcel()
+                ZbnStorage.ChecklistStep.PASSPORT -> scanButton.performClick()
+                ZbnStorage.ChecklistStep.CLOUD -> cloudButton.performClick()
+            }
+        }
+        checklistViews[step] = this
+    }
+
+    private fun refreshChecklist(tail: String) {
+        val labels = mapOf(
+            ZbnStorage.ChecklistStep.FLIGHT_DATA to "ПИ СНЯТА",
+            ZbnStorage.ChecklistStep.EXCEL to "EXCEL",
+            ZbnStorage.ChecklistStep.PASSPORT to "ПАСПОРТ",
+            ZbnStorage.ChecklistStep.CLOUD to "ОБЛАКО"
+        )
+        var completed = 0
+        checklistViews.forEach { (step, view) ->
+            val done = ZbnStorage.isStepComplete(context, tail, step)
+            if (done) completed++
+            view.text = (if (done) "✓ " else "○ ") + labels.getValue(step)
+            view.setTextColor(if (done) passportSavedColor else mutedColor)
+        }
+        val board = if (tail.isEmpty()) "БОРТ НЕ ОПРЕДЕЛЁН" else "RA-$tail"
+        checklistTitle.text = if (completed == checklistViews.size) {
+            "КОМПЛЕКТ ГОТОВ · $board"
+        } else {
+            "КОМПЛЕКТ $board · СЕГОДНЯ ($completed/${checklistViews.size})"
+        }
+        checklistTitle.setTextColor(if (completed == checklistViews.size) passportSavedColor else amberColor)
     }
 
     private fun label(text: String, color: Int = mutedColor, size: Float = 9f) = TextView(context).apply {
@@ -283,8 +402,4 @@ class DocumentScanPage(context: Context) : LinearLayout(context) {
 
     private val passportSavedColor: Int
         get() = Color.parseColor(if (palette.isLight) "#55B879" else "#39B978")
-
-    companion object {
-        private const val CLOUD_URL = "https://81.89.69.171/nextcloud/index.php/apps/files/files"
-    }
 }

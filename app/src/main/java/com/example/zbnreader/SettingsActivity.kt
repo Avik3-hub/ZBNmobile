@@ -86,6 +86,46 @@ class SettingsActivity : AppCompatActivity() {
             R.array.baud_rates,
             getBaudRateIndex(prefs.getInt("baud_rate", DEFAULT_BAUD_RATE))
         )
+        val nextcloud = NextcloudConfig.load(this)
+        val nextcloudUrl = EditText(this).apply {
+            setText(nextcloud.baseUrl)
+            textSize = 13f
+            setTextColor(COLOR_TEXT)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
+            setPadding(24, 20, 24, 20)
+        }
+        val nextcloudUser = EditText(this).apply {
+            setText(nextcloud.username)
+            textSize = 13f
+            setTextColor(COLOR_TEXT)
+            hint = "Имя пользователя Nextcloud"
+            setHintTextColor(palette.muted)
+            setSingleLine(true)
+            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
+            setPadding(24, 20, 24, 20)
+        }
+        val nextcloudPassword = EditText(this).apply {
+            textSize = 13f
+            setTextColor(COLOR_TEXT)
+            hint = if (nextcloud.appPassword.isNotBlank()) {
+                "Пароль приложения сохранён"
+            } else {
+                "Пароль приложения Nextcloud"
+            }
+            setHintTextColor(palette.muted)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
+            setPadding(24, 20, 24, 20)
+        }
+        val aircraftTypeSpinner = createCustomSpinner(
+            NextcloudConfig.AIRCRAFT_TYPES,
+            NextcloudConfig.AIRCRAFT_TYPES.indexOf(nextcloud.aircraftType).coerceAtLeast(0)
+        )
 
         val switchConnectionScene = SwitchCompat(this).apply {
             text = "Анимация обмена с ЗБН"
@@ -144,6 +184,15 @@ class SettingsActivity : AppCompatActivity() {
                     putBoolean(ZbnTheme.PREF_LIGHT_THEME, switchLightTheme.isChecked)
                     apply()
                 }
+                NextcloudConfig.save(
+                    context = this@SettingsActivity,
+                    baseUrl = nextcloudUrl.text.toString(),
+                    username = nextcloudUser.text.toString(),
+                    newPassword = nextcloudPassword.text.toString().takeIf { it.isNotBlank() },
+                    aircraftType = NextcloudConfig.AIRCRAFT_TYPES[
+                        aircraftTypeSpinner.selectedItemPosition
+                    ]
+                )
 
                 Toast.makeText(this@SettingsActivity, "Настройки сохранены", Toast.LENGTH_SHORT).show()
                 finish()
@@ -180,6 +229,14 @@ class SettingsActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { setMargins(0, 8, 0, 0) })
+        root.addView(createLabel("Автоматическая отправка в Nextcloud:"))
+        root.addView(nextcloudUrl)
+        root.addView(createLabel("Имя пользователя:"))
+        root.addView(nextcloudUser)
+        root.addView(createLabel("Пароль приложения:"))
+        root.addView(nextcloudPassword)
+        root.addView(createLabel("Тип вертолёта (проверяется первым):"))
+        root.addView(aircraftTypeSpinner)
 
         val saveParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -253,8 +310,10 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun createCustomSpinner(arrayResId: Int, selectedIndex: Int): Spinner {
-        val items = resources.getStringArray(arrayResId)
-        
+        return createCustomSpinner(resources.getStringArray(arrayResId), selectedIndex)
+    }
+
+    private fun createCustomSpinner(items: Array<String>, selectedIndex: Int): Spinner {
         val adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, items) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val v = super.getView(position, convertView, parent) as TextView

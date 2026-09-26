@@ -449,7 +449,15 @@ class MainActivity : AppCompatActivity() {
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         }, ContextCompat.RECEIVER_EXPORTED)
         usbReceiverRegistered = true
-        documentScanPage = DocumentScanPage(this)
+        documentScanPage = DocumentScanPage(
+            context = this,
+            onOpenFlightData = { mainPager.setCurrentItem(0, true) },
+            onExportExcel = {
+                mainPager.setCurrentItem(0, true)
+                exportToExcel()
+            },
+            onAutomaticUpload = { uploadTodayPackage() }
+        )
         mainPager = ViewPager2(this).apply {
             adapter = StaticPagesAdapter(listOf(screen, documentScanPage))
             offscreenPageLimit = 1
@@ -594,7 +602,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (::headerTailValue.isInitialized) refreshHeaderTail()
-        if (::documentScanPage.isInitialized) documentScanPage.refresh()
+        if (::documentScanPage.isInitialized) documentScanPage.onHostResume()
         if (::connectionScene.isInitialized) {
             val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
             connectionScene.setSceneEnabled(
@@ -613,6 +621,88 @@ class MainActivity : AppCompatActivity() {
         } else {
             if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
                 createMainDirectory()
+            }
+        }
+    }
+
+    private fun uploadTodayPackage() {
+        val prefs = getSharedPreferences("AppSettings", MODE_PRIVATE)
+        val tail = DocumentFileName.normalizeTailNumber(
+            prefs.getString(DocumentFileName.PREF_LAST_TAIL, "").orEmpty()
+        )
+        if (tail.isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Борт не определён")
+                .setMessage("Сначала снимите полётную информацию или укажите номер борта.")
+                .setPositiveButton("Понятно", null)
+                .show()
+            return
+        }
+
+        val settings = NextcloudConfig.load(this)
+        if (!settings.isComplete) {
+            AlertDialog.Builder(this)
+                .setTitle("Настройка Nextcloud")
+                .setMessage(
+                    "Для автоматической отправки укажите имя пользователя, пароль приложения " +
+                        "и тип вертолёта в настройках."
+                )
+                .setPositiveButton("Открыть настройки") { _, _ ->
+                    startActivity(Intent(this, SettingsActivity::class.java))
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
+            return
+        }
+
+        val files = ZbnStorage.todayFiles(tail)
+        if (files.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Нет файлов")
+                .setMessage("Для борта RA-$tail сегодня ещё нет файлов для отправки.")
+                .setPositiveButton("Понятно", null)
+                .show()
+            return
+        }
+
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("Отправка в Nextcloud")
+            .setMessage("Подготовка ${files.size} файлов…")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val result = NextcloudUploader(settings).upload(files, tail) { uploaded, total, name ->
+                runOnUiThread {
+                    if (progressDialog.isShowing) {
+                        progressDialog.setMessage("$uploaded из $total\n$name")
+                    }
+                }
+            }
+            runOnUiThread {
+                progressDialog.dismiss()
+                if (result.successful) {
+                    ZbnStorage.markStep(this, tail, ZbnStorage.ChecklistStep.CLOUD)
+                    documentScanPage.refresh()
+                    AlertDialog.Builder(this)
+                        .setTitle("Данные отправлены")
+                        .setMessage(
+                            "Отправлено ${result.uploaded} файлов в папку " +
+                                "${result.destination}."
+                        )
+                        .setPositiveButton("Готово", null)
+                        .show()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("Отправка не завершена")
+                        .setMessage(
+                            "Отправлено ${result.uploaded} из ${result.total}.\n" +
+                                result.error.orEmpty()
+                        )
+                        .setPositiveButton("Понятно", null)
+                        .show()
+                }
             }
         }
     }
@@ -1261,6 +1351,11 @@ class MainActivity : AppCompatActivity() {
                     val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "573" }
                     val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "64" }
                     saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
+                    ZbnStorage.markStep(
+                        this@MainActivity,
+                        record.tailNum,
+                        ZbnStorage.ChecklistStep.FLIGHT_DATA
+                    )
                     sceneSay("Полёт №${record.number} скачан")
                     downloadedRecordNumbers.add(record.number)
                     errorRecordNumbers.remove(record.number)
@@ -1408,6 +1503,7 @@ class MainActivity : AppCompatActivity() {
             val arinc = arincTypes.getOrElse(prefs.getInt("arinc", 0)) { "573" }
             val regSpeed = regSpeeds.getOrElse(prefs.getInt("reg_speed", 0)) { "64" }
             saveFlightMetadata(aircraftFolder, fileName, sysType, arinc, regSpeed)
+            ZbnStorage.markStep(this, tailNum, ZbnStorage.ChecklistStep.FLIGHT_DATA)
             log("Полный дамп успешен: Сохранено $totalBytes байт в $fileName")
             sceneSay("Весь ЗБН сохранён")
             updateStatus("Статус: Весь ЗБН сохранен ($totalBytes Б)")
@@ -1457,6 +1553,7 @@ class MainActivity : AppCompatActivity() {
                     workbook.write(fos)
                 }
                 workbook.close()
+                ZbnStorage.markStep(this@MainActivity, tailNum, ZbnStorage.ChecklistStep.EXCEL)
                 log("Таблица экспортирована в Excel: ${outputFile.absolutePath}")
                 updateStatus("Статус: Excel сохранен ($fileName)")
                 runOnUiThread { showBurPassportReminder() }

@@ -463,7 +463,7 @@ class DocumentScanActivity : AppCompatActivity() {
                 arrayOf("image/jpeg"),
                 null
             )
-            ZbnStorage.markPassportSaved(this)
+            ZbnStorage.markStep(this, tail, ZbnStorage.ChecklistStep.PASSPORT)
             Toast.makeText(this, "Сохранено: ${output.absolutePath}", Toast.LENGTH_LONG).show()
             finish()
         } catch (error: Exception) {
