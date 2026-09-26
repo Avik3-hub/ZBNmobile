@@ -688,7 +688,7 @@ class MainActivity : AppCompatActivity() {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("Данные отправлены")
                         .setMessage(
-                            "Отправлено ${result.uploaded} файлов в папку " +
+                            "Отправлено и проверено ${result.uploaded} файлов в папке " +
                                 "${result.destination}."
                         )
                         .setPositiveButton("Готово", null)

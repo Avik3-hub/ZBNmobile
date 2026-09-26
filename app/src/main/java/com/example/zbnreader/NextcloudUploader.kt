@@ -32,13 +32,44 @@ class NextcloudUploader(private val settings: NextcloudSettings) {
 
             files.forEachIndexed { index, file ->
                 onProgress(index, files.size, file.name)
-                uploadFile("$boardUrl${segment(file.name)}", file, destination)
+                val remoteUrl = "$boardUrl${segment(file.name)}"
+                uploadFile(remoteUrl, file, destination)
+                verifyUploadedFile(remoteUrl, file)
                 uploaded++
                 onProgress(uploaded, files.size, file.name)
             }
             Result(uploaded, files.size, destination = destination)
         } catch (error: Exception) {
             Result(uploaded, files.size, readableError(error))
+        }
+    }
+
+    private fun verifyUploadedFile(url: String, file: File) {
+        val connection = open(url, "HEAD")
+        try {
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                throw VerificationException(
+                    "${file.name}: проверка файла вернула код $code"
+                )
+            }
+
+            val remoteSize = connection.getHeaderField("Content-Length")?.toLongOrNull()
+                ?: connection.getHeaderField("OC-FileSize")?.toLongOrNull()
+                ?: -1L
+            if (remoteSize < 0L) {
+                throw VerificationException(
+                    "${file.name}: сервер не сообщил размер загруженного файла"
+                )
+            }
+            if (remoteSize != file.length()) {
+                throw VerificationException(
+                    "${file.name}: размер в облаке $remoteSize байт, " +
+                        "локальный размер ${file.length()} байт"
+                )
+            }
+        } finally {
+            connection.disconnect()
         }
     }
 
@@ -96,6 +127,8 @@ class NextcloudUploader(private val settings: NextcloudSettings) {
             error is MissingFolderException ->
                 "Папка «${error.destination}» не найдена в облаке. " +
                     "Файлы не отправлены, папки приложение не создавало."
+            error is VerificationException ->
+                "Файл отправлен, но не прошёл проверку в облаке: ${error.message}"
             message.contains("401") || message.contains("403") ->
                 "Nextcloud отклонил имя пользователя или пароль приложения"
             message.contains("certificate", ignoreCase = true) ||
@@ -107,5 +140,6 @@ class NextcloudUploader(private val settings: NextcloudSettings) {
 
     private class MissingFolderException(val destination: String) : Exception()
     private class UnknownBoardException(val tail: String) : Exception()
+    private class VerificationException(message: String) : Exception(message)
 
 }
