@@ -175,6 +175,14 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(0, 20, 0, 12)
         }
 
+        val switchExtendedDiagnostics = SwitchCompat(this).apply {
+            text = "Расширенная диагностика (полный HEX страниц ЗБН)"
+            textSize = 14f
+            setTextColor(COLOR_TEXT)
+            isChecked = prefs.getBoolean("zbn_extended_diagnostics", false)
+            setPadding(0, 20, 0, 12)
+        }
+
         val btnDemoConnection = Button(this).apply {
             text = "ПОКАЗАТЬ АНИМАЦИЮ СВЯЗИ"
             setTextColor(COLOR_TEXT)
@@ -213,6 +221,7 @@ class SettingsActivity : AppCompatActivity() {
                     putInt("reg_speed", spinnerRegSpeed.selectedItemPosition)
                     putInt("baud_rate", selectedBaud)
                     putBoolean("zbn_connection_scene_enabled", switchConnectionScene.isChecked)
+                    putBoolean("zbn_extended_diagnostics", switchExtendedDiagnostics.isChecked)
                     putBoolean(ZbnTheme.PREF_LIGHT_THEME, switchLightTheme.isChecked)
                     apply()
                 }
@@ -256,6 +265,7 @@ class SettingsActivity : AppCompatActivity() {
         root.addView(createLabel("Оформление:"))
         root.addView(switchLightTheme)
         root.addView(switchConnectionScene)
+        root.addView(switchExtendedDiagnostics)
         root.addView(btnDemoConnection, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT

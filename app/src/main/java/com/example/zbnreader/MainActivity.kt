@@ -1171,7 +1171,8 @@ class MainActivity : AppCompatActivity() {
     val reader = ZbnMetadataReader(
         port = port,
         catalogBaudRate = catalogBaudRate,
-        metadataBaudRate = 921600
+        metadataBaudRate = 921600,
+        extendedDiagnostics = prefs.getBoolean("zbn_extended_diagnostics", false)
     ) { message -> log(message) }
     // Keep the table ordered newest-first, but read metadata oldest-first.
     // Isolated service/anomalous record numbers sort above normal flight

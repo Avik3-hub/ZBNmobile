@@ -9,10 +9,11 @@ class ZbnMetadataReader(
     private val port: UsbSerialPort,
     private val catalogBaudRate: Int = 115200,
     private val metadataBaudRate: Int = 921600,
+    private val extendedDiagnostics: Boolean = false,
     private val diagnostic: (String) -> Unit = {}
 ) {
     fun read(record: FlightRecord): ZbnDecodedMetadata {
-        val raw = readRawPage(record, record.startAddress, includeHexDump = true)
+        val raw = readRawPage(record, record.startAddress, includeHexDump = extendedDiagnostics)
         return if (raw.size == FIXED_PAGE_SIZE) {
             decodePage(raw, record.number, record.startAddress)
         } else {
@@ -119,7 +120,9 @@ class ZbnMetadataReader(
             diagnostic("META_END №${record.number}: финальный ACK не получен ($finalAckCount байт)")
         }
         // Log only AFTER receiving: formatting HEX during USB reads can lose data.
-        diagnostic("META_RX №${record.number}: address=0x${address.toString(16)}, bytes=${raw.size}/$FIXED_PAGE_SIZE, chunks=$chunkSizes")
+        diagnostic("META_RX №${record.number}: address=0x${address.toString(16)}, " +
+            "bytes=${raw.size}/$FIXED_PAGE_SIZE, chunks=${chunkSizes.size}")
+        if (includeHexDump) diagnostic("META_CHUNKS №${record.number}: $chunkSizes")
         if (includeHexDump) {
             for (offset in raw.indices step 512) {
                 diagnostic("META_HEX №${record.number} offset=$offset: " +
