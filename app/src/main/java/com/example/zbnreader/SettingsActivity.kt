@@ -194,6 +194,15 @@ class SettingsActivity : AppCompatActivity() {
         ).apply { setMargins(0, 20, 0, 0) }
         root.addView(btnSaveLog, saveLogParams)
 
+        root.addView(TextView(this).apply {
+            text = "© Avik3 и Си"
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(COLOR_TEXT)
+            alpha = 0.6f
+            setPadding(0, 28, 0, 8)
+        })
+
         setContentView(ScrollView(this).apply {
             setBackgroundColor(COLOR_BG)
             addView(root)
