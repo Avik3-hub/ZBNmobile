@@ -330,7 +330,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 }
 
-    private data class SecureField(val container: FrameLayout, val input: EditText)
+    private data class SecureField(val container: LinearLayout, val input: EditText)
 
     private fun createSecureField(value: String, hint: String): SecureField {
         val input = EditText(this).apply {
@@ -342,8 +342,8 @@ class SettingsActivity : AppCompatActivity() {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
-            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
-            setPadding(24, 20, dp(54), 20)
+            background = null
+            setPadding(24, 20, 8, 20)
         }
         val eye = ImageButton(this).apply {
             setImageResource(R.drawable.ic_visibility_centered)
@@ -364,16 +364,20 @@ class SettingsActivity : AppCompatActivity() {
                 contentDescription = if (visible) "Скрыть значение" else "Показать значение"
             }
         }
-        val container = FrameLayout(this).apply {
-            addView(input, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = createRoundedDrawable(COLOR_SURFACE, 12f, COLOR_BORDER, 1)
+            addView(input, LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
             ))
-            addView(eye, FrameLayout.LayoutParams(
+            addView(eye, LinearLayout.LayoutParams(
                 dp(48),
-                dp(48),
-                Gravity.END or Gravity.CENTER_VERTICAL
+                dp(48)
             ).apply {
+                gravity = Gravity.CENTER_VERTICAL
                 marginEnd = dp(4)
             })
         }
