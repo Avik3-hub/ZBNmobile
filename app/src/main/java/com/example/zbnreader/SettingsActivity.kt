@@ -120,11 +120,11 @@ class SettingsActivity : AppCompatActivity() {
             addView(createBoardEditor("МИ-8 Т", mi8TBoards, mi8AmtBoards, "Ми-8 АМТ"))
             addView(createBoardEditor("МИ-8 АМТ", mi8AmtBoards, mi8TBoards, "Ми-8 Т"))
         }
-        val nextcloudArrow = TextView(this).apply {
-            text = "›"
-            textSize = 24f
-            setTextColor(palette.amber)
-            gravity = Gravity.CENTER_VERTICAL
+        val nextcloudArrow = ImageView(this).apply {
+            setImageResource(R.drawable.ic_chevron_right_centered)
+            setColorFilter(palette.amber)
+            scaleType = ImageView.ScaleType.CENTER
+            contentDescription = "Развернуть настройки облака"
         }
         val nextcloudHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -150,7 +150,12 @@ class SettingsActivity : AppCompatActivity() {
             setOnClickListener {
                 val expand = nextcloudSection.visibility != View.VISIBLE
                 nextcloudSection.visibility = if (expand) View.VISIBLE else View.GONE
-                nextcloudArrow.text = if (expand) "⌄" else "›"
+                nextcloudArrow.rotation = if (expand) 90f else 0f
+                nextcloudArrow.contentDescription = if (expand) {
+                    "Свернуть настройки облака"
+                } else {
+                    "Развернуть настройки облака"
+                }
             }
         }
 
@@ -341,7 +346,7 @@ class SettingsActivity : AppCompatActivity() {
             setPadding(24, 20, dp(54), 20)
         }
         val eye = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_view)
+            setImageResource(R.drawable.ic_visibility_centered)
             setColorFilter(palette.muted)
             background = null
             contentDescription = "Показать значение"
