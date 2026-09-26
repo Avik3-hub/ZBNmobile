@@ -350,7 +350,7 @@ class SettingsActivity : AppCompatActivity() {
             setColorFilter(palette.muted)
             background = null
             contentDescription = "Показать значение"
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            scaleType = ImageView.ScaleType.CENTER
             var visible = false
             setOnClickListener {
                 visible = !visible
@@ -371,9 +371,11 @@ class SettingsActivity : AppCompatActivity() {
             ))
             addView(eye, FrameLayout.LayoutParams(
                 dp(48),
-                FrameLayout.LayoutParams.MATCH_PARENT,
+                dp(48),
                 Gravity.END or Gravity.CENTER_VERTICAL
-            ))
+            ).apply {
+                marginEnd = dp(4)
+            })
         }
         return SecureField(container, input)
     }
