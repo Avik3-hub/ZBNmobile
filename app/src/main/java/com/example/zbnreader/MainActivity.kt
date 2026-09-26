@@ -683,9 +683,9 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 progressDialog.dismiss()
                 if (result.successful) {
-                    ZbnStorage.markStep(this, tail, ZbnStorage.ChecklistStep.CLOUD)
+                    ZbnStorage.markStep(this@MainActivity, tail, ZbnStorage.ChecklistStep.CLOUD)
                     documentScanPage.refresh()
-                    AlertDialog.Builder(this)
+                    AlertDialog.Builder(this@MainActivity)
                         .setTitle("Данные отправлены")
                         .setMessage(
                             "Отправлено ${result.uploaded} файлов в папку " +
@@ -694,7 +694,7 @@ class MainActivity : AppCompatActivity() {
                         .setPositiveButton("Готово", null)
                         .show()
                 } else {
-                    AlertDialog.Builder(this)
+                    AlertDialog.Builder(this@MainActivity)
                         .setTitle("Отправка не завершена")
                         .setMessage(
                             "Отправлено ${result.uploaded} из ${result.total}.\n" +
