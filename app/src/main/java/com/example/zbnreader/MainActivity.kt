@@ -1120,6 +1120,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     val rawCatalog = catalogBuffer.toByteArray()
+    if (rawCatalog.isNotEmpty()) {
+        try {
+            val dir = File(getExternalFilesDir(null), "ZBNreader/${ZbnRawCapture.DIRECTORY_NAME}")
+            val file = ZbnRawCapture.saveCatalog(dir, rawCatalog)
+            log("CATALOG_RAW: ${rawCatalog.size} байт, файл ${file.name}")
+        } catch (e: Exception) {
+            log("Не удалось сохранить сырое оглавление", e)
+        }
+    }
     val descriptorSize = ZbnTocParser.DESCRIPTOR_SIZE
     val trailingByteCount = rawCatalog.size % descriptorSize
     // A complete ZBN catalog is an aligned sequence of 16-byte slots followed
@@ -1172,7 +1181,11 @@ class MainActivity : AppCompatActivity() {
         port = port,
         catalogBaudRate = catalogBaudRate,
         metadataBaudRate = 921600,
-        extendedDiagnostics = prefs.getBoolean("zbn_extended_diagnostics", false)
+        rawPageDiagnostic = { record, address, raw ->
+            val dir = File(getExternalFilesDir(null), "ZBNreader/${ZbnRawCapture.DIRECTORY_NAME}")
+            val file = ZbnRawCapture.save(dir, record, address, raw)
+            log("META_RAW №${record.number}: ${raw.size} байт, файл ${file.name}")
+        }
     ) { message -> log(message) }
     // Keep the table ordered newest-first, but read metadata oldest-first.
     // Isolated service/anomalous record numbers sort above normal flight
